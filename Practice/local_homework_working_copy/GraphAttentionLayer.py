@@ -53,8 +53,8 @@ class GraphAttentionLayer(nn.Module):
     return self.leakyrelu(e)
 
  def forward(self, h: torch.Tensor, adj_mat: torch.Tensor):
-    # expected input h.shape: batch_size, n_nodes, in_features
-    batch_size, n_input, n_nodes, in_features = h.shape
+    # expected input h.shape: batch_size, in_features, n_input, n_nodes
+    batch_size, in_features, n_input, n_nodes = h.shape
 
     # print(f"h.shape: {h.shape}")
     # print(f"self.W.shape: {self.W.shape}")
@@ -63,11 +63,18 @@ class GraphAttentionLayer(nn.Module):
     # Apply linear transformation to node feature -> W h
     # output shape (n_nodes, n_hidden * n_heads)
     # h_transformed = torch.matmul(h, self.W)
-    # b --> batch_size
-    # n --> n_nodes
-    # c --> in_features
-    # d --> n_hidden
-    h_transformed = torch.einsum("binc,cd->bind", h, self.W)
+    # b --> batch
+    # s --> in_features (s stands for spacial)
+    # t --> n_input (t stands for temporal)
+    # j --> n_nones (j stands for joints)
+    # h --> hidden_dim (h stands for hidden, F' in the GAT paper)
+    print(f"[GATLayer] h.shape: {h.shape}")
+    print(f"[GATLayer] self.W.shape: {self.W.shape}")
+    h = torch.permute(h, (0, 2, 3, 1))
+    print(f"[GATLayer] h.shape                           : {h.shape}")
+    # (batch_size, n_input, n_nodes, in_features)
+    h_transformed = torch.einsum("btjs,sh->btjh", h, self.W)
+    print(f"[GATLayer] h_transformed.shape (after einsum): {h_transformed.shape}")
     h_transformed = F.dropout(h_transformed, self.dropout, training=self.training)
     # print(f"h_transformed.shape: {h_transformed.shape}")
 

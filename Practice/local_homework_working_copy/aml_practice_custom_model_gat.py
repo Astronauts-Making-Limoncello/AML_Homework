@@ -20,9 +20,16 @@ import wandb
 
 import os
 
+from GATEncoder import GATEncoder
+from GATDecoder import GATDecoder
+from GATAutoEncoder import GATAutoEncoder
+
 # Use GPU if available, otherwise stick with cpu
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print('Using device:', device,  '- Type:', torch.cuda.get_device_name(0))
+
+# *_dim --> number of features --> spacial dimensionality
+# n_*   --> number of frames   --> temporal dimensionality
 
 # # Arguments to setup the datasets
 datas = 'h36m' # dataset name
@@ -31,7 +38,7 @@ input_n=10 # number of frames to train on (default=10)
 output_n=25 # number of frames to predict on
 input_dim=3 # dimensions of the input coordinates(default=3)
 skip_rate=1 # # skip rate of frames
-joints_to_consider=22
+joints_to_consider_n=22
 
 
 #FLAGS FOR THE TRAINING
@@ -55,7 +62,7 @@ print('Loading Validation Dataset...')
 vald_dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=1)
 
 batch_size=256
-lim_n_batches_percent = 1
+lim_n_batches_percent = 0.01
 
 print('>>> Training dataset length: {:d}'.format(dataset.__len__()))
 data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)#
@@ -69,9 +76,54 @@ print('Using device: %s'%device)
 
 n_heads = 2
 
-model = Model(num_joints=joints_to_consider,
-                 num_frames=input_n, num_frames_out=output_n, num_heads=n_heads,
-                 num_channels=3, kernel_size=[3,3], use_pes=True).to(device)
+# model = Model(num_joints=joints_to_consider_n,
+#                  num_frames=input_n, num_frames_out=output_n, num_heads=n_heads,
+#                  num_channels=3, kernel_size=[3,3], use_pes=True).to(device)
+
+# *_dim --> number of features --> spacial dimensionality
+# n_*   --> number of frames   --> temporal dimensionality
+
+latent_dim = 128 # features in the latent space
+latent_n = 15 # number of frames in the latent space
+
+# we are autoencoding, so input dims must be the same as the output ones
+output_dim = input_dim
+
+# (input_dim, output_dim, n_heads) for each GAT layer
+# make sure that output_dim % n_heads == 0
+GAT_config_enc = [
+  (input_dim, 20, 4),
+  (20, 40, 8),
+  (40 , latent_dim, 2)
+]
+
+# in_channels and out_channels for each conv2D layer
+channel_config_enc = [
+  [input_n, 2],
+  [2, 4],
+  [4, latent_n]
+]
+
+enc = GATEncoder(GAT_config_enc, channel_config_enc)
+
+# (input_dim, output_dim, n_heads) for each GAT layer
+# make sure that output_dim % n_heads == 0
+GAT_config_dec = [
+  (latent_dim, 20, 4),
+  (20, 40, 8),
+  (40 , output_dim, 1)
+]
+
+# in_channels and out_channels for each conv2D layer
+channel_config_dec = [
+  [latent_n, 2],
+  [2, 4],
+  [4, output_n]
+]
+
+dec = GATDecoder(GAT_config_dec, channel_config_dec)  
+
+model = GATAutoEncoder(enc, dec).to(device)
 
 print('total number of parameters of the network is: '+str(sum(p.numel() for p in model.parameters() if p.requires_grad)))
 
@@ -90,7 +142,7 @@ clip_grad=None # select max norm to clip gradients
 # Argument for training
 # n_epochs=41
 # log_step = 200
-n_epochs=2
+n_epochs=3
 log_step = 200
 
 train_id = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
@@ -98,9 +150,26 @@ ckpt_dir = f"{model_path}{train_id}"
 os.makedirs(ckpt_dir) if not os.path.exists(ckpt_dir) else None
 
 train_config = {
+  "input_n": input_n, 
+  "output_n": output_n, 
+  "input_dim": input_dim, 
+  "skip_rate": skip_rate,
+  "joints_to_consider_n": joints_to_consider_n,
+  "batch_size": batch_size,
+  "lim_n_batches_percent": lim_n_batches_percent,
+  # "adj_mat": adj_mat,
+  
   "n_heads": n_heads,
+  "latent_dim": latent_dim,
+  "latent_n": latent_n,
+  "output_dim": output_dim,
+  "GAT_config_enc": GAT_config_enc,
+  "channel_config_enc": channel_config_enc,
+  "GAT_config_dec": GAT_config_dec,
+  "channel_config_dec": channel_config_dec,
   "model": str(model),
   "num_trainable_parameters": str(sum(p.numel() for p in model.parameters() if p.requires_grad)),
+  
   "lr": lr,
   "use_scheduler": use_scheduler,
   "milestones": milestones,
@@ -109,6 +178,7 @@ train_config = {
   "optimizer": str(optimizer),
   "scheduler": str(scheduler),
   "clip_grad": clip_grad,
+  
   "n_epochs": n_epochs,
   "train_id": train_id
 }
@@ -116,7 +186,7 @@ train_config = {
 def train(data_loader,vald_loader, path_to_save_model=None):
 
   # wandb.init(
-  #   project="Spatio-Temporal Transformer fine-tuning",
+  #   project="Custom model",
   #   config=train_config
   # )
 
@@ -131,6 +201,31 @@ def train(data_loader,vald_loader, path_to_save_model=None):
                     26, 27, 28, 29, 30, 31, 32, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45,
                     46, 47, 51, 52, 53, 54, 55, 56, 57, 58, 59, 63, 64, 65, 66, 67, 68,
                     75, 76, 77, 78, 79, 80, 81, 82, 83, 87, 88, 89, 90, 91, 92])
+  
+  n_joints = len(dim_used)//3
+  joint_to_consider_ids = set(dim_used//3)
+  joints_to_consider_ids_remapped = {
+      k: v for k, v in zip(joint_to_consider_ids, range(len(joint_to_consider_ids))) 
+  }
+  print(f"joint_to_consider_ids: {joint_to_consider_ids}")
+  print(f"joints_to_consider_ids_remapped: {joints_to_consider_ids_remapped}")
+  print(f"len(joint_to_consider_ids): {len(joint_to_consider_ids)}")
+
+  connect = [
+    (1, 2), (2, 3), (3, 4), (4, 5), (6, 7), (7, 8), (8, 9), (9, 10), (0, 1), 
+    (0, 6), (6, 17), (17, 18), (18, 19), (19, 20), (20, 21), (21, 22), (1, 25), 
+    (25, 26), (26, 27), (27, 28), (28, 29), (29, 30), (24, 25), (24, 17), 
+    (24, 14), (14, 15)
+  ]
+  connect = [c for c in connect if c[0] in joint_to_consider_ids and c[1] in joint_to_consider_ids]
+  adj_mat = torch.zeros(n_joints, n_joints, dtype=torch.int).to(device)
+  for edge in connect:
+    adj_mat[joints_to_consider_ids_remapped[edge[0]], joints_to_consider_ids_remapped[edge[1]]] = 1
+    adj_mat[joints_to_consider_ids_remapped[edge[1]], joints_to_consider_ids_remapped[edge[0]]] = 1  # If the graph is undirected
+  
+  print(f"len(dim_used): {len(dim_used)}")
+  print(f"len(dim_used)//3: {len(dim_used)//3}")
+  print(f"n_joints: {n_joints}")
 
   for epoch in range(n_epochs-1):
       running_loss=0
@@ -146,10 +241,8 @@ def train(data_loader,vald_loader, path_to_save_model=None):
 
           optimizer.zero_grad()
           print(f"sequences_train.shape: {sequences_train.shape}") # [256, 3, 10, 22]
-          sequences_predict=model(sequences_train).view(-1, output_n, joints_to_consider, 3)
+          sequences_predict=model.forward(sequences_train, adj_mat).view(-1, output_n, joints_to_consider_n, 3)
           print(f"sequences_predict.shape: {sequences_predict.shape}") # [256, 25, 22, 3]
-
-          return 
 
           loss=mpjpe_error(sequences_predict,sequences_gt)
 
@@ -178,7 +271,7 @@ def train(data_loader,vald_loader, path_to_save_model=None):
               sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3).permute(0,3,1,2)
               sequences_gt=batch[:, input_n:input_n+output_n, dim_used].view(-1,output_n,len(dim_used)//3,3)
 
-              sequences_predict=model(sequences_train).view(-1, output_n, joints_to_consider, 3)
+              sequences_predict=model(sequences_train).view(-1, output_n, joints_to_consider_n, 3)
               loss=mpjpe_error(sequences_predict,sequences_gt)
 
               if cnt % log_step == 0:
@@ -225,6 +318,7 @@ save_and_plot = True # save the model and plot the loss. Change to True if you w
 # launch training
 train(data_loader,vald_loader, path_to_save_model=model_path)
 
+exit()
 # TODO implement changes before using it!
 def test(ckpt_path=None):
     # model.load_state_dict(torch.load(ckpt_path))
@@ -267,7 +361,7 @@ def test(ckpt_path=None):
 
 
           running_time = time.time()
-          sequences_predict=model(sequences_train).view(-1, output_n, joints_to_consider, 3)
+          sequences_predict=model(sequences_train).view(-1, output_n, joints_to_consider_n, 3)
           #sequences_predict = model(sequences_train)
           totalll += time.time()-running_time
           counter += 1
