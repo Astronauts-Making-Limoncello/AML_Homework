@@ -15,8 +15,9 @@ class GATAutoEncoder(nn.Module):
   def forward(self, h: torch.Tensor, adj_mat: torch.Tensor):
 
     h_latent = self.enc(h, adj_mat)
-    print(f"h_latent.shape: {h_latent.shape}")
+    # print(f"[GATAuto] h_latent.shape: {h_latent.shape}") # batch_size, (temporal dim), n_nodes (spacial dim), latent_features
     h_tilde= self.dec(h_latent, adj_mat)
+    # print(f"[GATAuto] h_tilde.shape: {h_tilde.shape}") # batch_size, (temporal dim), n_nodes (spacial dim), out_features
 
     return h_tilde
 

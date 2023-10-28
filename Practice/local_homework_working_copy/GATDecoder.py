@@ -18,13 +18,13 @@ class GATDecoder(nn.Module):
     if len(GAT_config) != len(channel_config):
       raise ValueError("GAT_config len different than channel_config len")
 
-    self.GAT_encoder = nn.ModuleList()
+    self.GAT_decoder = nn.ModuleList()
 
     for i, (in_features, out_features, n_heads) in enumerate(GAT_config):
       # in_features --> F in GAT paper
       # out_features --> F' in GAT paper
       
-      self.GAT_encoder.append(
+      self.GAT_decoder.append(
         GraphAttentionLayer(
           in_features=in_features,
           out_features=out_features,
@@ -33,7 +33,7 @@ class GATDecoder(nn.Module):
         )
       )
 
-      self.GAT_encoder.append(
+      self.GAT_decoder.append(
         nn.Conv2d(
           in_channels=channel_config[i][0], 
           out_channels=channel_config[i][1], 
@@ -45,14 +45,16 @@ class GATDecoder(nn.Module):
 
     h_prime = h
 
-    for gat_enc_layer in self.GAT_encoder:
+    for gat_enc_layer in self.GAT_decoder:
 
       if isinstance(gat_enc_layer, GraphAttentionLayer):
         h_prime = gat_enc_layer.forward(h=h_prime, adj_mat=adj_mat)
-        print(f"h_prime.shape: {h_prime.shape}")
+        # print(f"[GAT Decoder] h_prime.shape: {h_prime.shape}") # batch_size, in_channels (temporal dim), n_nodes (spacial dim), in_features (out_feature if last layer)
       
       elif isinstance(gat_enc_layer, nn.Conv2d):
         h_prime = gat_enc_layer.forward(h_prime)
+        # print(f"[GAT Decoder] h_prime.shape: {h_prime.shape}") # batch_size, out_channels (temporal dim), n_nodes (spacial dim), in_features (out_feature if last layer)
+
       
       else:
         raise ValueError(f"Unsupported layer type: {type(gat_enc_layer)}")

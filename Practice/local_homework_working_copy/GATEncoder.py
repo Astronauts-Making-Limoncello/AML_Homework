@@ -33,8 +33,6 @@ class GATEncoder(nn.Module):
         )
       )
 
-      break
-
       self.GAT_encoder.append(
         nn.Conv2d(
           in_channels=channel_config[i][0], 
@@ -47,14 +45,20 @@ class GATEncoder(nn.Module):
 
     h_prime = h
 
+    gat_layer_id = 0
+
     for gat_enc_layer in self.GAT_encoder:
 
       if isinstance(gat_enc_layer, GraphAttentionLayer):
+        gat_layer_id += 1
+        # print(f"[GAT Encoder] layer {gat_layer_id}")
         h_prime = gat_enc_layer.forward(h=h_prime, adj_mat=adj_mat)
-        print(f"h_prime.shape: {h_prime.shape}")
-      
+        # print(f"[GAT Encoder] h_prime.shape: {h_prime.shape}") # batch_size, n_input (temporal dim), n_nodes (spacial dim), in_features (out_features if last layer)
+
       elif isinstance(gat_enc_layer, nn.Conv2d):
         h_prime = gat_enc_layer.forward(h_prime)
+        # print(f"[GAT Encoder] h_prime.shape: {h_prime.shape}") # batch_size, out_channels (temporal dim), n_nodes (spacial dim), in_features (out_features if last layer)
+
       
       else:
         raise ValueError(f"Unsupported layer type: {type(gat_enc_layer)}")

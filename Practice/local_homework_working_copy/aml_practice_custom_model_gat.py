@@ -68,7 +68,7 @@ print('Loading Validation Dataset...')
 vald_dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=1, actions=actions_to_consider_train)
 
 batch_size=256
-lim_n_batches_percent = 0.01
+lim_n_batches_percent = 0.1
 
 print('>>> Training dataset length: {:d}'.format(dataset.__len__()))
 data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)#
@@ -149,7 +149,7 @@ clip_grad=None # select max norm to clip gradients
 # n_epochs=41
 # log_step = 200
 n_epochs=3
-log_step = 200
+log_step = 1
 
 train_id = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
 ckpt_dir = f"{model_path}{train_id}"
@@ -243,18 +243,13 @@ def train(data_loader,vald_loader, path_to_save_model=None):
           n+=batch_dim
 
           sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3)
-          print(f"[train] sequences_train.shape: {sequences_train.shape}")
-          # assignent dimensionalities [256, 10, 22, 3] --> [batch_size, n_input, n_nodes, in_features]
-          # reference dimensionalities [2708, 1433] --> [n_nodes, in_features]
+          # print(f"[train] sequences_train.shape: {sequences_train.shape}") # batch_size, n_input (temporal dim), n_nodes (spacial dim/skeleton joints), in_features
           sequences_gt=batch[:, input_n:input_n+output_n, dim_used].view(-1,output_n,len(dim_used)//3,3)
 
           optimizer.zero_grad()
           
-          # sequences_predict=model.forward(sequences_train, adj_mat).view(-1, output_n, joints_to_consider_n, 3)
-          sequences_predict=model.enc.forward(sequences_train, adj_mat).view(-1, output_n, joints_to_consider_n, 3)
-          
-          exit()
-          # print(f"sequences_predict.shape: {sequences_predict.shape}") # [256, 25, 22, 3]
+          sequences_predict=model.forward(sequences_train, adj_mat)
+          # print(f"[train] sequences_predict.shape: {sequences_predict.shape}") # batch_size, n_output (temporal dim), n_nodes (spacial dim/skeleton joints), out_features
 
           loss=mpjpe_error(sequences_predict,sequences_gt)
 
@@ -279,15 +274,15 @@ def train(data_loader,vald_loader, path_to_save_model=None):
               batch_dim=batch.shape[0]
               n+=batch_dim
 
-
-              sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3).permute(0,3,1,2)
+              sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3)
               sequences_gt=batch[:, input_n:input_n+output_n, dim_used].view(-1,output_n,len(dim_used)//3,3)
 
-              sequences_predict=model(sequences_train).view(-1, output_n, joints_to_consider_n, 3)
+              sequences_predict=model(sequences_train, adj_mat)
+              
               loss=mpjpe_error(sequences_predict,sequences_gt)
 
               if cnt % log_step == 0:
-                        print('[Epoch: %d, Iteration: %5d]  validation loss: %.3f' %(epoch + 1, cnt + 1, loss.item()))
+                print('[Epoch: %d, Iteration: %5d]  validation loss: %.3f' %(epoch + 1, cnt + 1, loss.item()))
               running_loss+=loss*batch_dim
           val_loss.append(running_loss.detach().cpu()/n)
           if running_loss/n < val_loss_best:
