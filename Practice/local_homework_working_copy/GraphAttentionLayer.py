@@ -44,17 +44,21 @@ class GraphAttentionLayer(nn.Module):
 
  def _get_attention_scores(self, h_transformed: torch.Tensor):
 
+    print(f"[_get_attention_scores] a.shape: {self.a.shape}")
     source_scores = torch.matmul(h_transformed, self.a[:, :self.n_hidden, :])
+    print(f"[_get_attention_scores] source_scores.shape: {source_scores.shape}")
     target_scores = torch.matmul(h_transformed, self.a[:, self.n_hidden:, :])
+    print(f"[_get_attention_scores] target_scores.shape: {target_scores.shape}")
 
     # broadcast add
     # (n_heads, n_nodes, 1) + (n_heads, 1, n_nodes) = (n_heads, n_nodes, n_nodes)
     e = source_scores + target_scores.mT
+    print(f"[_get_attention_scores] e.shape: {e.shape}")
     return self.leakyrelu(e)
 
  def forward(self, h: torch.Tensor, adj_mat: torch.Tensor):
-    # expected input h.shape: batch_size, in_features, n_input, n_nodes
-    batch_size, in_features, n_input, n_nodes = h.shape
+    # h.shape --> batch_size, in_features, n_input, n_nodes
+    batch_size, n_input, n_nodes, in_features = h.shape
 
     # print(f"h.shape: {h.shape}")
     # print(f"self.W.shape: {self.W.shape}")
@@ -69,29 +73,27 @@ class GraphAttentionLayer(nn.Module):
     # j --> n_nones (j stands for joints)
     # h --> hidden_dim (h stands for hidden, F' in the GAT paper)
     print(f"[GATLayer] h.shape: {h.shape}")
-    print(f"[GATLayer] self.W.shape: {self.W.shape}")
-    h = torch.permute(h, (0, 2, 3, 1))
-    print(f"[GATLayer] h.shape                           : {h.shape}")
+    print(f"[GATLayer] W.shape: {self.W.shape}")
     # (batch_size, n_input, n_nodes, in_features)
     h_transformed = torch.einsum("btjs,sh->btjh", h, self.W)
     print(f"[GATLayer] h_transformed.shape (after einsum): {h_transformed.shape}")
     h_transformed = F.dropout(h_transformed, self.dropout, training=self.training)
-    # print(f"h_transformed.shape: {h_transformed.shape}")
-
+    
     # splitting the heads by reshaping the tensor and putting heads dim first
     # output shape (n_heads, n_nodes, n_hidden)
-    h_transformed = h_transformed.view(batch_size, n_input, n_nodes, self.n_heads, self.n_hidden).permute(0, 1, 3, 2, 4)
-    # print(f"h_transformed.shape: {h_transformed.shape}")
+    h_transformed = h_transformed.view(batch_size, n_input, n_nodes, self.n_heads, self.n_hidden)
+    print(f"[GATLayer] h_transformed (view).shape: {h_transformed.shape}")
+    h_transformed = h_transformed.permute(0, 1, 3, 2, 4)
+    print(f"[GATLayer] h_transformed (permute).shape: {h_transformed.shape}")
 
     # getting the attention scores
     # output shape (n_heads, n_nodes, n_nodes)
     e = self._get_attention_scores(h_transformed)
-    # print(f"e.shape: {e.shape}")
-
 
     # Set the attention score for non-existent edges to -9e15 (MASKING NON-EXISTENT EDGES)
     connectivity_mask = -9e16 * torch.ones_like(e)
     e = torch.where(adj_mat > 0, e, connectivity_mask) # masked attention scores
+    print(f"[GATLayer] e.shape: {e.shape}")
 
     # attention coefficients are computed as a softmax over the rows
     # for each column j in the attention score matrix e
@@ -100,7 +102,8 @@ class GraphAttentionLayer(nn.Module):
 
     # final node embeddings are computed as a weighted average of the features of its neighbors
     h_prime = torch.matmul(attention, h_transformed)
-    # print(f"h_prime.shape: {h_prime.shape}")
+    print(f"[GATLayer] h_prime.shape: {h_prime.shape}")
+    exit()
 
     # concatenating/averaging the attention heads
     # output shape (n_nodes, out_features)

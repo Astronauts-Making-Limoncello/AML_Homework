@@ -55,11 +55,17 @@ actions_to_consider_viz='all' # actions to visualize
 visualize_from='test'
 n_viz=2
 
+actions_to_consider_train = ["walking"]
+# actions_to_consider_train = None
+
+if actions_to_consider_train is not None:
+  print(f"ACTIONS_TO_CONSIDER_TRAIN: {actions_to_consider_train}")
+
 # Load Data
 print('Loading Train Dataset...')
-dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=0)
+dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=0, actions=actions_to_consider_train)
 print('Loading Validation Dataset...')
-vald_dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=1)
+vald_dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=1, actions=actions_to_consider_train)
 
 batch_size=256
 lim_n_batches_percent = 0.01
@@ -236,13 +242,19 @@ def train(data_loader,vald_loader, path_to_save_model=None):
           batch_dim=batch.shape[0]
           n+=batch_dim
 
-          sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3).permute(0,3,1,2)
+          sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3)
+          print(f"[train] sequences_train.shape: {sequences_train.shape}")
+          # assignent dimensionalities [256, 10, 22, 3] --> [batch_size, n_input, n_nodes, in_features]
+          # reference dimensionalities [2708, 1433] --> [n_nodes, in_features]
           sequences_gt=batch[:, input_n:input_n+output_n, dim_used].view(-1,output_n,len(dim_used)//3,3)
 
           optimizer.zero_grad()
-          print(f"sequences_train.shape: {sequences_train.shape}") # [256, 3, 10, 22]
-          sequences_predict=model.forward(sequences_train, adj_mat).view(-1, output_n, joints_to_consider_n, 3)
-          print(f"sequences_predict.shape: {sequences_predict.shape}") # [256, 25, 22, 3]
+          
+          # sequences_predict=model.forward(sequences_train, adj_mat).view(-1, output_n, joints_to_consider_n, 3)
+          sequences_predict=model.enc.forward(sequences_train, adj_mat).view(-1, output_n, joints_to_consider_n, 3)
+          
+          exit()
+          # print(f"sequences_predict.shape: {sequences_predict.shape}") # [256, 25, 22, 3]
 
           loss=mpjpe_error(sequences_predict,sequences_gt)
 

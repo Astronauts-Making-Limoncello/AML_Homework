@@ -33,6 +33,8 @@ class GATEncoder(nn.Module):
         )
       )
 
+      break
+
       self.GAT_encoder.append(
         nn.Conv2d(
           in_channels=channel_config[i][0], 
