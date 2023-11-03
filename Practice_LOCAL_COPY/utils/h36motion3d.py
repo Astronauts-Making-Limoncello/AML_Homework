@@ -6,6 +6,7 @@ from utils import data_utils
 from matplotlib import pyplot as plt
 import torch
 
+from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn
 
 class Datasets(Dataset):
 
@@ -28,6 +29,20 @@ class Datasets(Dataset):
         self.data_idx = []
         seq_len = self.in_n + self.out_n
         subs = np.array([[1, 6, 7, 8, 9], [11], [5]]) # , 6, 7, 8, 9
+        progress_bar = Progress(
+            TextColumn("[progress.description]{task.description}"),
+            TextColumn("[progress.percentage]{task.percentage:>3.2f}%"),
+            BarColumn(),
+            MofNCompleteColumn(),
+            TextColumn("•"),
+            TimeElapsedColumn(),
+            TextColumn("•"),
+            TimeRemainingColumn(),
+            TextColumn("[#00008B]{task.speed} it/s"),
+            SpinnerColumn()
+        )
+
+        progress_bar.start()
         # acts = data_utils.define_actions(actions)
         if actions is None:
             acts = ["walking", "eating", "smoking", "discussion", "directions",
@@ -49,8 +64,17 @@ class Datasets(Dataset):
 
         subs = subs[split]
         key = 0
+
+        subj_task = progress_bar.add_task("[bold][#D4B483]Subj", total=len(subs))  
+        action_task = progress_bar.add_task("[bold][#06BCC1]Action", total=len(acts))  
+
         for subj in subs:
+
+            progress_bar.reset(action_task)
+            
             for action_idx in np.arange(len(acts)):
+
+                progress_bar.advance(action_task, 1)
                 action = acts[action_idx]
                 if self.split <= 1:
                     for subact in [1, 2]:  # subactions
@@ -124,10 +148,15 @@ class Datasets(Dataset):
                     self.data_idx.extend(zip(tmp_data_idx_1, tmp_data_idx_2))
                     key += 2
 
+
+            progress_bar.advance(subj_task, 1)
+
         # ignore constant joints and joints at same position with other joints
         joint_to_ignore = np.array([0, 1, 6, 11, 16, 20, 23, 24, 28, 31])
         dimensions_to_ignore = np.concatenate((joint_to_ignore * 3, joint_to_ignore * 3 + 1, joint_to_ignore * 3 + 2))
         self.dimensions_to_use = np.setdiff1d(np.arange(96), dimensions_to_ignore)
+
+        progress_bar.stop()
 
     def __len__(self):
         return np.shape(self.data_idx)[0]

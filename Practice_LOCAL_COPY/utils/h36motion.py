@@ -6,6 +6,7 @@ from utils import data_utils
 from matplotlib import pyplot as plt
 import torch
 
+from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn
 
 class Datasets(Dataset):
 
@@ -50,8 +51,28 @@ class Datasets(Dataset):
 
         subs = subs[split]
 
+        progress_bar = Progress(
+            TextColumn("[progress.description]{task.description}"),
+            TextColumn("[progress.percentage]{task.percentage:>3.2f}%"),
+            BarColumn(),
+            MofNCompleteColumn(),
+            TextColumn("•"),
+            TimeElapsedColumn(),
+            TextColumn("•"),
+            TimeRemainingColumn(),
+            TextColumn("[#00008B]{task.speed} it/s"),
+            SpinnerColumn()
+        )
+
+        subj_task = progress_bar.add_task("[bold][#D4B483]Epoch progress...", total=len(subs))  
+        action_task = progress_bar.add_task("[bold][#06BCC1]Train batches progress...", total=len(acts))  
+
+        progress_bar.start()
+
         for subj in subs:
             for action_idx in np.arange(len(acts)):
+                progress_bar.reset(action_task)
+
                 action = acts[action_idx]
                 if self.split <= 1:
                     for subact in [1, 2]:  # subactions
@@ -114,6 +135,10 @@ class Datasets(Dataset):
                     tmp_data_idx_1 = [(subj, action, 2)] * len(valid_frames)
                     tmp_data_idx_2 = list(valid_frames)
                     self.data_idx.extend(zip(tmp_data_idx_1, tmp_data_idx_2))
+
+                progress_bar.advance(action_task, 1)
+
+            progress_bar.advance(subj_task, 1)
 
     def __len__(self):
         return np.shape(self.data_idx)[0]
