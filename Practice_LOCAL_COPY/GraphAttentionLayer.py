@@ -3,7 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 
 ################################
-### GAT LAYER DEFINITION ###
+### GAT LAYER DEFINITION     ###
 ################################
 
 # taken from official paper implementation BUT added support for batch dimension
@@ -32,7 +32,7 @@ class GraphAttentionLayer(nn.Module):
     self.a = nn.Parameter(torch.empty(size=(n_heads, 2 * self.n_hidden, 1)))
 
     self.leakyrelu = nn.LeakyReLU(leaky_relu_slope) # LeakyReLU activation function
-    self.softmax = nn.Softmax(dim=1) # softmax activation function to the attention coefficients
+    self.softmax = nn.Softmax(dim=2) # softmax activation function to the attention coefficients
 
     self.reset_parameters() # Reset the parameters
 
@@ -106,8 +106,9 @@ class GraphAttentionLayer(nn.Module):
       h_prime = h_prime.view(batch_size, n_input, n_nodes, self.out_features)
       # print(f"h_prime.shape: {h_prime.shape}")
     else:
-      # TODO add support for batch size here, this version doesn't support it!
-      h_prime = h_prime.mean(dim=0)
+      # before mean shape: batch_size, n_input (temporal dim), n_heads, n_nodes (spacial dim), n_hidden
+      # gotta collapse along the n_heads dimension
+      h_prime = h_prime.mean(dim=2)
 
-    # print(f"[GATLayer] h_prime.shape: {h_prime.shape}") # batch_size, n_input (temporal dim), n_nodes (spacial dim), out_features
+    # print(f"[GATLayer] h_prime.shape: {h_prime.shape}") # batch_size, n_input (temporal dim), n_nodes (spacial dim), n_hidden
     return h_prime
