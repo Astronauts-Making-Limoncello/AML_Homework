@@ -36,9 +36,9 @@ progress_bar = Progress(
     SpinnerColumn()
 )
 
-from GATEncoder import GATEncoder
-from GATDecoder import GATDecoder
-from GATAutoEncoder import GATAutoEncoder
+from models.ConvGAT.GATEncoder import GATEncoder
+from models.ConvGAT.GATDecoder import GATDecoder
+from models.ConvGAT.GATAutoEncoder import GATAutoEncoder
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using device: {torch.cuda.get_device_name(device)}")
