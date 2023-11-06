@@ -18,27 +18,8 @@ import datetime
 import os
 import wandb
 
-import warnings; warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
-
-import rich
-from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn
-progress_bar = Progress(
-    TextColumn("[progress.description]{task.description}"),
-    TextColumn("[progress.percentage]{task.percentage:>3.2f}%"),
-    BarColumn(),
-    MofNCompleteColumn(),
-    TextColumn("•"),
-    TimeElapsedColumn(),
-    TextColumn("•"),
-    TimeRemainingColumn(),
-    TextColumn("[#00008B]{task.speed} it/s"),
-    SpinnerColumn(),
-)
 from rich import print
 
-def causal_mask(mask_shape):
-  mask = torch.triu(torch.ones(mask_shape), diagonal=1).type(torch.int)
-  return mask == 0
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print('Using device:', device,  '- Type:', torch.cuda.get_device_name(0))
@@ -67,6 +48,8 @@ actions_to_consider_viz='all' # actions to visualize
 visualize_from='test'
 n_viz=2
 
+### --- DATA --- ###
+
 # actions_to_consider_train = ["smoking"]
 actions_to_consider_train = None
 
@@ -80,7 +63,7 @@ print('Loading Validation Dataset...')
 vald_dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=1, actions=actions_to_consider_train)
 
 batch_size=256
-lim_n_batches_percent = 0.025
+lim_n_batches_percent = 0.1
 
 print('>>> Training dataset length: {:d}'.format(dataset.__len__()))
 data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)#
@@ -88,40 +71,30 @@ data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_worke
 print('>>> Validation dataset length: {:d}'.format(vald_dataset.__len__()))
 vald_loader = DataLoader(vald_dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)
 
+### --- DATA --- ###
+
+############################################################
+
+### --- MODEL --- ###
+
 from SpatioTemporalEncoder import SpatioTemporalEncoder
 from SpatioTemporalDecoder import SpatioTemporalDecoder
 from SpatioTemporalTransformer import SpatioTemporalTransformer
+from utils.masking import causal_mask
 
-num_heads_encoder = 8 # encoder
-num_heads_decoder = 1 # decoder
-kernel_size = [3,3]
-att_drop=0
-
-# temporal
+# temporal dimensionalities
 num_frames = 10
 num_frames_out = 25
 
-# spatial 
+# spatial dimensionalities
 num_joints = 22
 in_features = 3
-hidden_features = 128
+hidden_features = 64
 out_features = 3
 
-
-# config = [
-#   # [16, 16, 16], [16, 16, 16], [16, 16, 16], [16, 16, 16], 
-#   # [16, 16, 16], [16, 16, 16], [16, 16, 16], 
-#   [16,  out_features, 16]    
-# ]
-
-# st_encoder = SpatioTemporalEncoder(
-#     num_joints=num_joints, num_frames=num_frames, num_frames_out=num_frames_out,
-#     num_heads=num_heads_encoder, num_channels=in_features, out_features=out_features,
-#     kernel_size=[3, 3], config=config
-# )
-
-use_skip_connection_encoder = True
-num_encoder_blocks = 3
+use_skip_connection_encoder = False
+num_heads_encoder = 1
+num_encoder_blocks = 1
 
 st_encoder = SpatioTemporalEncoder(
     in_features, hidden_features, out_features, num_joints,
@@ -130,8 +103,9 @@ st_encoder = SpatioTemporalEncoder(
     num_encoder_blocks
 )
 
+num_heads_decoder = 1
 use_skip_connection_decoder = False
-num_decoder_blocks = 3
+num_decoder_blocks = 1
 
 st_decoder = SpatioTemporalDecoder(
     in_features, hidden_features, out_features, num_joints,
@@ -154,32 +128,44 @@ model = st_transformer = SpatioTemporalTransformer(
     num_frames=num_frames, num_joints=num_joints, in_features=in_features
 ).to(device)
 
-print('total number of parameters of the network is: '+str(sum(p.numel() for p in model.parameters() if p.requires_grad)))
+print('Num trainable parameters: '+str(sum(p.numel() for p in model.parameters() if p.requires_grad)))
 
-# Arguments to setup the optimizer
-lr=3e-3 # learning rate
+### --- MODEL --- ###
 
+############################################################
+
+### --- OPTIMIZER --- ###
+
+lr=1e-3 
+weight_decay=1e-5 
+amsgrad=True
+momentum=0.3
+nesterov=True
+clip_grad=None # select max norm to clip gradients
+
+
+optimizer=optim.Adam(model.parameters(),lr=lr,weight_decay=weight_decay, amsgrad=amsgrad)
+# optimizer=optim.SGD(model.parameters(), lr=lr, weight_decay=weight_decay, momentum=momentum, nesterov=nesterov)
+
+### --- OPTIMIZER --- ###
+
+############################################################
+
+### --- LR SCHEDULER --- ###
 use_scheduler=False 
 milestones=[10]   # the epochs after which the learning rate is adjusted by gamma
 gamma=0.33 #gamma correction to the learning rate, after reaching the milestone epochs
 step_size=10
 
-weight_decay=1e-8 # weight decay (L2 penalty)
-
-momentum=0.3
-nesterov=True
-
-optimizer=optim.Adam(model.parameters(),lr=lr,weight_decay=weight_decay, amsgrad=False)
-# optimizer=optim.SGD(model.parameters(), lr=lr, weight_decay=weight_decay, momentum=momentum, nesterov=nesterov)
-
 if use_scheduler:
     scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=gamma, verbose=True)
     # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma, verbose=True)
 
-clip_grad=None # select max norm to clip gradients
-# Argument for training
-# n_epochs=41
-# log_step = 200
+### --- LR SCHEDULER --- ###
+
+############################################################
+
+### --- TRAINING CONFIG --- ###
 
 n_epochs = 6
 log_step = 99999
@@ -209,9 +195,6 @@ train_config = {
   "lim_n_batches_percent": lim_n_batches_percent,
   "encoder_num_heads": num_heads_encoder,
   "decoder_num_heads": num_heads_decoder,
-  "kernel_size": kernel_size,
-  "att_drop": att_drop,
-  # "st_encoder_config": config,
   "use_skip_connection_decoder": use_skip_connection_decoder,
   "use_skip_connection_encoder": use_skip_connection_encoder,
   "num_encoder_blocks": num_encoder_blocks,
@@ -233,6 +216,7 @@ train_config = {
   "gamma": gamma,
   "step_size": step_size,
   "weight_decay": weight_decay,
+  "amsgrad": amsgrad,
   "momentum": momentum,
   "nesterov": nesterov,
   "optimizer": optimizer,
@@ -242,6 +226,24 @@ train_config = {
   "train_id": train_id
 }
 
+### --- TRAINING CONFIG --- ###
+
+############################################################
+
+from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn
+
+progress_bar = Progress(
+  TextColumn("[progress.description]{task.description}"),
+  TextColumn("[progress.percentage]{task.percentage:>3.2f}%"),
+  BarColumn(),
+  MofNCompleteColumn(),
+  TextColumn("•"),
+  TimeElapsedColumn(),
+  TextColumn("•"),
+  TimeRemainingColumn(),
+  TextColumn("[#00008B]{task.speed} it/s"),
+  SpinnerColumn(),
+)
 
 progress_bar.start()
 
@@ -402,9 +404,9 @@ def train(data_loader,vald_loader, path_to_save_model=None):
       })
 
       if epoch == 0:
-        rich.print(f"epoch: [bold][#B22222]{epoch + 1}[/#B22222][/b], train loss: [bold][#6495ED]{train_loss[-1]:.3f}[/#6495ED][/b], val loss: [b][#008080]{val_loss[-1]:.3f}[/#008080][/b]")
+        print(f"epoch: [bold][#B22222]{epoch + 1}[/#B22222][/b], train loss: [bold][#6495ED]{train_loss[-1]:.3f}[/#6495ED][/b], val loss: [b][#008080]{val_loss[-1]:.3f}[/#008080][/b]")
       else:
-        rich.print(f"epoch: [bold][#B22222]{epoch + 1}[/#B22222][/b], train loss: [bold][#6495ED]{train_loss[-1]:.3f}[/#6495ED][/b] ([#6495ED][b]{(train_loss[-1] - train_loss[-2]):.3f}[/#6495ED][/b]), val loss: [b][#008080]{val_loss[-1]:.3f}[/#008080][/b] ([b][#008080]{(val_loss[-1] - val_loss[-2]):.3f}[/#008080][/b])")
+        print(f"epoch: [bold][#B22222]{epoch + 1}[/#B22222][/b], train loss: [bold][#6495ED]{train_loss[-1]:.3f}[/#6495ED][/b] ([#6495ED][b]{(train_loss[-1] - train_loss[-2]):.3f}[/#6495ED][/b]), val loss: [b][#008080]{val_loss[-1]:.3f}[/#008080][/b] ([b][#008080]{(val_loss[-1] - val_loss[-2]):.3f}[/#008080][/b])")
 
 
   wandb.log({
