@@ -3,3 +3,5 @@
 /Practice_LOCAL_COPY/checkpoints
 /Practice_LOCAL_COPY/wandb
 /Practice_LOCAL_COPY/data
+
+**/__pycache__/
