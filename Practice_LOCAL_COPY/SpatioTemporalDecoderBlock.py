@@ -2,21 +2,12 @@ import torch
 import torch.nn as nn
 
 from SpatioTemporalCrossAttention import SpatioTemporalCrossAttention
+from MLP import MLP
+from utils.init_layer import conv_init, bn_init, ln_init, fc_init
 
 from rich import print
 
-def conv_init(conv):
-    nn.init.kaiming_normal_(conv.weight, mode='fan_out')
-    # nn.init.constant_(conv.bias, 0)
-
-def bn_init(bn, scale):
-    nn.init.constant_(bn.weight, scale)
-    nn.init.constant_(bn.bias, 0)
-
-def fc_init(fc):
-    nn.init.xavier_normal_(fc.weight)
-    nn.init.constant_(fc.bias, 0)
-
+# taken as is from CVPR'23 reference paper https://github.com/zhenhuat/STCFormer
 class SpatioTemporalDecoderBlock(nn.Module):
   
     def __init__(
@@ -27,7 +18,9 @@ class SpatioTemporalDecoderBlock(nn.Module):
     ):
         super().__init__()
 
-        self.layer_norm = nn.LayerNorm(in_features)
+        self.use_skip_connection = use_skip_connection
+
+        self.layer_norm_1 = nn.LayerNorm(in_features)
 
         self.spatio_temporal_cross_attention = SpatioTemporalCrossAttention(
             in_features=in_features, out_features=out_features, num_joints=num_joints,
@@ -35,13 +28,16 @@ class SpatioTemporalDecoderBlock(nn.Module):
             num_heads=num_heads
         )
 
-        self.use_skip_connection = use_skip_connection
-        
+        self.layer_norm_2 = nn.LayerNorm(out_features)
+
+        self.mlp = MLP(out_features, out_features)
             
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 conv_init(m)
             elif isinstance(m, nn.BatchNorm2d):
+                bn_init(m, 1)
+            elif isinstance(m, nn.LayerNorm):
                 bn_init(m, 1)
             elif isinstance(m, nn.Linear):
                 fc_init(m)
@@ -53,11 +49,20 @@ class SpatioTemporalDecoderBlock(nn.Module):
         
         x_prime = x
 
-        x = self.layer_norm(x)
+        x = self.layer_norm_1(x)
 
         x = self.spatio_temporal_cross_attention(
             x, encoder_output, mask_s=mask_s, mask_t=mask_t
         )
+
+        if self.use_skip_connection:
+            x = x + x_prime
+
+        x_prime = x
+
+        x = self.layer_norm_2(x)
+
+        x = self.mlp(x)
 
         if self.use_skip_connection:
             x = x + x_prime
