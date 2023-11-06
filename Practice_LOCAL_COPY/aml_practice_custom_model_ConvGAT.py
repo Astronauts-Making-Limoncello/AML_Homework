@@ -253,7 +253,7 @@ train_config = {
 def train(data_loader,vald_loader, path_to_save_model=None):
 
   wandb.init(
-    project="Custom model - GAT Spatio-Temporal AutoEncoder",
+    project="Custom-model-ConvSTGAT",
     config=train_config
   )
   wandb.watch(model)
