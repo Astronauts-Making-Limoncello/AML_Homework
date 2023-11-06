@@ -1,6 +1,7 @@
 import torch.nn as nn
 from .sta_block import STA_Block
 
+from rich import print
 
 def conv_init(conv):
     nn.init.kaiming_normal_(conv.weight, mode='fan_out')
@@ -66,18 +67,50 @@ class Model(nn.Module):
                 fc_init(m)
 
     def forward(self, x):
+        # print(f"\[STTformer.forward] x.shape (before reshape): {x.shape}")
         x = x.reshape(-1, self.num_frames, self.num_joints, self.num_channels, self.num_persons).permute(0, 3, 1, 2, 4).contiguous()
+        # x.shape: (batch_size, in_features, num_frames, num_joints) --> (batch_size, in_features, num_frames, num_joints, 1) 
+        # print(f"\[STTformer.forward] x.shape (after  reshape): {x.shape}")
         N, C, T, V, M = x.shape
         
+        # print(f"\[STTformer.forward] x.shape (before permute and view): {x.shape}")
         x = x.permute(0, 4, 1, 2, 3).contiguous().view(N * M, C, T, V)
+        # x.shape: (batch_size, in_features, num_frames, num_joints, 1) --> (batch_size, in_features, num_frames, num_joints)
+        # print(f"\[STTformer.forward] x.shape (after  permute and view): {x.shape}")
         
+        # print(f"\[STTformer.forward] x.shape (before view): {x.shape}")
         x = x.view(x.size(0), x.size(1), T // self.len_parts, V * self.len_parts)
+        # x.shape: (batch_size, in_features, num_frames, num_joints) --> (batch_size, in_features, num_frames, num_joints) 
+        # it seems strange, it's probably needed to handle some special case or something among those lines?
+        # print(f"\[STTformer.forward] x.shape (after  view): {x.shape}")
+        
         x = self.input_map(x)
+        # x.shape: (batch_size, in_channels, num_frames, num_joints)
+        # this probably maps original number of input features (3, i.e. x, y and z coordinates of the joints)
+        # to a needed number of features/channels, specified in in_channels of class builder
+        # print(f"\[STTformer.forward] x.shape (after self.input_map): {x.shape}")
+
+        
         
         for i, block in enumerate(self.blocks):
+            # print(f"\[STTformer.forward] block {i}, x.shape (before block): {x.shape}")
             x = block(x)
+            # print(f"\[STTformer.forward] block {i}, x.shape (after  block): {x.shape}")
 
-            
-        out = self.fc_out(self.conv_out(x.reshape(-1, self.num_frames, self.num_joints*self.num_channels)))  
+        # print(f"\[STTformer.forward] x.shape (before reshape): {x.shape}")
+        x = x.reshape(-1, self.num_frames, self.num_joints*self.num_channels)
+        # x.shape: (batch_size, in_features, num_frames, num_joints) --> (batch_size, num_frames, in_features * num_joints)
+        # print(f"\[STTformer.forward] x.shape (after  reshape): {x.shape}")
+        
+        # print(f"\[STTformer.forward] x.shape (before self.conv_out): {x.shape}")
+        # expands num_frames dimension from num_frames input frames to num_frames_out output frames
+        x = self.conv_out(x)
+        # x.shape: (batch_size, num_frames_out, in_features * num_joints)
+        # print(f"\[STTformer.forward] x.shape (after  self.conv_out): {x.shape}")
+
+        # print(f"\[STTformer.forward] x.shape (before self.fc_out): {x.shape}")
+        out = self.fc_out(x)  
+        # x.shape: (batch_size, num_frames_out, in_features * num_joints)
+        # print(f"\[STTformer.forward] x.shape (after  self.fc_out): {x.shape}")
         
         return out
