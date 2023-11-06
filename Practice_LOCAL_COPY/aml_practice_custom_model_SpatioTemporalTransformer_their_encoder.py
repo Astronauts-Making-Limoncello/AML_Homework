@@ -108,19 +108,29 @@ hidden_features = 128
 out_features = 3
 
 
-config = [
-  # [16, 16, 16], [16, 16, 16], [16, 16, 16], [16, 16, 16], 
-  # [16, 16, 16], [16, 16, 16], [16, 16, 16], 
-  [16,  out_features, 16]    
-]
+# config = [
+#   # [16, 16, 16], [16, 16, 16], [16, 16, 16], [16, 16, 16], 
+#   # [16, 16, 16], [16, 16, 16], [16, 16, 16], 
+#   [16,  out_features, 16]    
+# ]
+
+# st_encoder = SpatioTemporalEncoder(
+#     num_joints=num_joints, num_frames=num_frames, num_frames_out=num_frames_out,
+#     num_heads=num_heads_encoder, num_channels=in_features, out_features=out_features,
+#     kernel_size=[3, 3], config=config
+# )
+
+use_skip_connection_encoder = True
+num_encoder_blocks = 3
 
 st_encoder = SpatioTemporalEncoder(
-    num_joints=num_joints, num_frames=num_frames, num_frames_out=num_frames_out,
-    num_heads=num_heads_encoder, num_channels=in_features, out_features=out_features,
-    kernel_size=[3, 3], config=config
+    in_features, hidden_features, out_features, num_joints,
+    num_frames, num_frames, # it's encoder, so num_frames_out == num_frames
+    num_heads_encoder, use_skip_connection_encoder,
+    num_encoder_blocks
 )
 
-use_skip_connection_decoder = True
+use_skip_connection_decoder = False
 num_decoder_blocks = 3
 
 st_decoder = SpatioTemporalDecoder(
@@ -141,7 +151,6 @@ decoder_mask_t = causal_mask((1, 1, 1, num_frames_out, num_frames)).to(device)
 
 model = st_transformer = SpatioTemporalTransformer(
     st_encoder=st_encoder, st_decoder=st_decoder,
-    decoder_mask_s=decoder_mask_s, decoder_mask_t=decoder_mask_t,
     num_frames=num_frames, num_joints=num_joints, in_features=in_features
 ).to(device)
 
@@ -172,7 +181,7 @@ clip_grad=None # select max norm to clip gradients
 # n_epochs=41
 # log_step = 200
 
-n_epochs = 61
+n_epochs = 6
 log_step = 99999
 log_epoch = 1 
 
@@ -202,8 +211,10 @@ train_config = {
   "decoder_num_heads": num_heads_decoder,
   "kernel_size": kernel_size,
   "att_drop": att_drop,
-  "st_encoder_config": config,
+  # "st_encoder_config": config,
   "use_skip_connection_decoder": use_skip_connection_decoder,
+  "use_skip_connection_encoder": use_skip_connection_encoder,
+  "num_encoder_blocks": num_encoder_blocks,
   "num_decoder_blocks": num_decoder_blocks,
   "decoder_mask_s": decoder_mask_s,
   "decoder_mask_t": decoder_mask_t,
@@ -273,7 +284,10 @@ def train(data_loader,vald_loader, path_to_save_model=None):
           batch_dim=batch.shape[0]
           n+=batch_dim
 
-          sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3).permute(0,3,1,2)
+          # TODO encoders based on their code require the permute
+          # sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3).permute(0,3,1,2)
+          # TODO encoders based on our code do NOT require the permute
+          sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3)
           # print(f"\[main.train] sequences_train.shape: {sequences_train.shape}")
           sequences_gt=batch[:, input_n:input_n+output_n, dim_used].view(-1,output_n,len(dim_used)//3,3)
           # print(f"\[main.train] sequences_gt.shape: {sequences_gt.shape}")
@@ -320,8 +334,10 @@ def train(data_loader,vald_loader, path_to_save_model=None):
               batch_dim=batch.shape[0]
               n+=batch_dim
 
-
-              sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3).permute(0,3,1,2)
+              # TODO encoders based on their code require the permute
+              # sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3).permute(0,3,1,2)
+              # TODO encoders based on our code do NOT require the permute
+              sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3)
               sequences_gt=batch[:, input_n:input_n+output_n, dim_used].view(-1,output_n,len(dim_used)//3,3)
 
               # sequences_predict=model(sequences_train).view(-1, output_n, joints_to_consider, 3)
@@ -450,7 +466,10 @@ def test(ckpt_path=None):
 
           all_joints_seq=batch.clone()[:, input_n:input_n+output_n,:]
 
-          sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3).permute(0,3,1,2)
+          # TODO encoders based on their code require the permute
+          # sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3).permute(0,3,1,2)
+          # TODO encoders based on our code do NOT require the permute
+          sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3)
           # sequences_gt=batch[:, input_n:input_n+output_n, :]
           sequences_gt=batch[:, input_n:input_n+output_n, dim_used].view(-1,output_n,len(dim_used)//3,3)
 

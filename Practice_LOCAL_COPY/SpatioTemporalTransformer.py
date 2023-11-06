@@ -26,15 +26,12 @@ class SpatioTemporalTransformer(nn.Module):
     def __init__(
         self, 
         st_encoder: SpatioTemporalEncoder, st_decoder: SpatioTemporalDecoder,
-        decoder_mask_s, decoder_mask_t,
         num_frames, num_joints, in_features
     ):
         super().__init__()
 
         self.st_encoder = st_encoder
         self.st_decoder = st_decoder
-        self.decoder_mask_s = decoder_mask_s
-        self.decoder_mask_t = decoder_mask_t
 
         self.num_frames = num_frames
         self.num_joints = num_joints
@@ -62,7 +59,6 @@ class SpatioTemporalTransformer(nn.Module):
 
         decoder_output = self.st_decoder.forward(
             tgt, encoder_output, 
-            # mask_s=self.decoder_mask_s, mask_t=self.decoder_mask_t
             mask_s=tgt_mask_s, mask_t=tgt_mask_t
         )
         # print(f"\[SpatioTemporalTransformer.forward] decoder_output.shape: {decoder_output.shape}")
@@ -120,7 +116,6 @@ def main():
 
     st_transformer = SpatioTemporalTransformer(
         st_encoder=st_encoder, st_decoder=st_decoder,
-        decoder_mask_t=decoder_mask_t, decoder_mask_s=decoder_mask_s,
         num_frames=num_frames, num_joints=num_joints, in_features=in_features, 
     ).to(device)
 
