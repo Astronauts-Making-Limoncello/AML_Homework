@@ -54,7 +54,9 @@ class SpatioTemporalTransformer(nn.Module):
         # print(f"\[SpatioTemporalTransformer.forward] src.shape: {src.shape}")
         # print(f"\[SpatioTemporalTransformer.forward] tgt.shape: {tgt.shape}")
 
-        encoder_output = self.st_encoder.forward(src)
+        encoder_output = self.st_encoder.forward(
+            src, src, mask_s=None, mask_t=None
+        )
         encoder_output = encoder_output.view(-1, self.num_frames, self.num_joints, self.in_features)
         # print(f"\[SpatioTemporalTransformer.forward] encoder_output.shape: {encoder_output.shape}")
 
@@ -85,18 +87,17 @@ def main():
 
     # model
     num_heads = 8
-    config = [
-        [16, 16, 16], [16, 16, 16], [16, 16, 16], [16, 16, 16], 
-        [16, 16, 16], [16, 16, 16], [16, 16, 16], [16,  out_features, 16]    
-    ]
+    use_skip_connection = True
+
+    num_encoder_blocks = 3
 
     st_encoder = SpatioTemporalEncoder(
-        num_joints=num_joints, num_frames=num_frames, num_frames_out=num_frames_out,
-        num_heads=num_heads, num_channels=in_features, out_features=out_features,
-        kernel_size=[3, 3], config=config
+        in_features, hidden_features, out_features, num_joints,
+        num_frames, num_frames, # it's encoder, so num_frames_out == num_frames
+        num_heads, use_skip_connection,
+        num_encoder_blocks
     )
 
-    use_skip_connection = True
     num_decoder_blocks = 3
 
     st_decoder = SpatioTemporalDecoder(
@@ -124,7 +125,8 @@ def main():
     ).to(device)
 
     batch_size = 256
-    src = torch.rand((batch_size, in_features, num_frames, num_joints)).to(device)
+    # src = torch.rand((batch_size, in_features, num_frames, num_joints)).to(device)
+    src = torch.rand((batch_size, num_frames    , num_joints, in_features)).to(device)
     tgt = torch.rand((batch_size, num_frames_out, num_joints, in_features)).to(device)
 
     decoder_output = st_transformer.forward(
