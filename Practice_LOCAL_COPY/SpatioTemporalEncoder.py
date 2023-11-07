@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+from torch import Tensor
+from typing import Optional
 
 from SpatioTemporalEncoderBlock import SpatioTemporalEncoderBlock
 from utils.init_layer import conv_init, fc_init, bn_init, ln_init
@@ -13,10 +15,10 @@ class SpatioTemporalEncoder(nn.Module):
   
     def __init__(
         self, 
-        in_features, hidden_features, out_features, num_joints,
-        num_frames, num_frames_out,
-        num_heads, use_skip_connection,
-        num_encoder_blocks
+        in_features: int, hidden_features: int, out_features: int, num_joints: int,
+        num_frames: int, num_frames_out: int,
+        num_heads: int, use_skip_connection: bool,
+        num_encoder_blocks: int
     ):
         super().__init__()
 
@@ -50,7 +52,7 @@ class SpatioTemporalEncoder(nn.Module):
                 fc_init(m)
             
             
-    def forward(self, encoder_input, mask_s, mask_t):
+    def forward(self, encoder_input: Tensor, mask_s: Optional[Tensor]=None, mask_t: Optional[Tensor]=None):
        
         encoder_input = self.encoder_input_fc_in(encoder_input)
 

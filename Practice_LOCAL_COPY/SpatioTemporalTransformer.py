@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+from torch import Tensor
+from typing import Optional
 
 from SpatioTemporalEncoder import SpatioTemporalEncoder
 from SpatioTemporalDecoder import SpatioTemporalDecoder
@@ -23,7 +25,7 @@ class SpatioTemporalTransformer(nn.Module):
     def __init__(
         self, 
         st_encoder: SpatioTemporalEncoder, st_decoder: SpatioTemporalDecoder,
-        num_frames, num_joints, in_features
+        num_frames: int, num_joints: int, in_features: int
     ):
         super().__init__()
 
@@ -43,7 +45,7 @@ class SpatioTemporalTransformer(nn.Module):
                 fc_init(m)
         
 
-    def forward(self, src, tgt, tgt_mask_s, tgt_mask_t):
+    def forward(self, src: Tensor, tgt: Tensor, tgt_mask_s: Optional[Tensor]=None, tgt_mask_t: Optional[Tensor]=None):
 
         # print(f"\[SpatioTemporalTransformer.forward] src.shape: {src.shape}")
         # print(f"\[SpatioTemporalTransformer.forward] tgt.shape: {tgt.shape}")

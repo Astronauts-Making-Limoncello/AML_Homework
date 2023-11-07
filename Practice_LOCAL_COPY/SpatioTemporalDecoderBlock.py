@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+from torch import Tensor
+from typing import Optional
 
 from SpatioTemporalCrossAttention import SpatioTemporalCrossAttention
 from MLP import MLP
@@ -12,9 +14,9 @@ class SpatioTemporalDecoderBlock(nn.Module):
   
     def __init__(
         self, 
-        in_features, out_features, num_joints,
-        num_frames, num_frames_out,
-        num_heads, use_skip_connection
+        in_features: int, out_features: int, num_joints: int,
+        num_frames: int, num_frames_out: int,
+        num_heads: int, use_skip_connection: bool
     ):
         super().__init__()
 
@@ -43,7 +45,7 @@ class SpatioTemporalDecoderBlock(nn.Module):
                 fc_init(m)
             
             
-    def forward(self, decoder_input, encoder_output, mask_s, mask_t):
+    def forward(self, decoder_input: Tensor, encoder_output: Tensor, mask_s: Optional[Tensor]=None, mask_t: Optional[Tensor]=None):
         #  decoder_input.shape: batch_size, temporal_dim, spatial_dim, feature_dim
         # encoder_output.shape: batch_size, temporal_dim, spatial_dim, feature_dim
         

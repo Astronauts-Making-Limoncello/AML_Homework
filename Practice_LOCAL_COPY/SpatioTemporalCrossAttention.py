@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 from torch.nn.functional import softmax
+from torch import Tensor
+from typing import Optional
 
 from utils.masking import causal_mask
 
@@ -12,9 +14,9 @@ from rich import print
 
 class SpatioTemporalCrossAttention(nn.Module):
     def __init__(
-        self, in_features, out_features,
-        num_frames, num_frames_out,
-        num_joints, num_heads
+        self, in_features: int, out_features: int,
+        num_frames: int, num_frames_out: int,
+        num_joints: int, num_heads: int
     ):
         super().__init__()
 
@@ -44,7 +46,7 @@ class SpatioTemporalCrossAttention(nn.Module):
             kernel_size=1
         )
 
-    def forward(self, q, k, v, mask_s, mask_t):
+    def forward(self, q: Tensor, k: Tensor, v: Tensor, mask_s: Optional[Tensor]=None, mask_t: Optional[Tensor]=None):
         # x.shape             : b, num_frames_out, num_joints, in_features
         # encoder_output.shape: b, num_frames    , num_joints, in_features
         
