@@ -360,17 +360,17 @@ def train(data_loader,vald_loader, path_to_save_model=None):
               progress_bar.update(task_id=epoch_task, advance=1/(n_train_batches + n_val_batches))
 
 
-              if running_loss/n < val_loss_best:
-                val_loss_best = running_loss/n
-                val_loss_best_epoch = epoch
+          if running_loss/n < val_loss_best:
+            val_loss_best = running_loss/n
+            val_loss_best_epoch = epoch
 
-                torch.save({
-                  'epoch': epoch + 1,
-                  'model_state_dict': model.state_dict(),
-                  'optimizer_state_dict': optimizer.state_dict(),
-                  'train_loss': train_loss,
-                  'val_loss': val_loss
-                  }, f"{ckpt_dir}/{model_name}_best_val_loss.pt")
+            torch.save({
+              'epoch': epoch + 1,
+              'model_state_dict': model.state_dict(),
+              'optimizer_state_dict': optimizer.state_dict(),
+              'train_loss': train_loss,
+              'val_loss': val_loss
+              }, f"{ckpt_dir}/{model_name}_best_val_loss.pt")
 
 
           val_loss.append(running_loss.detach().cpu()/n)
