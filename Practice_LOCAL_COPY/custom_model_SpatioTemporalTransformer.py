@@ -95,8 +95,8 @@ st_encoder = SpatioTemporalEncoder(
     num_encoder_blocks
 )
 
-num_heads_decoder = 1
 use_skip_connection_decoder = False
+num_heads_decoder = 1
 num_decoder_blocks = 1
 
 st_decoder = SpatioTemporalDecoder(
