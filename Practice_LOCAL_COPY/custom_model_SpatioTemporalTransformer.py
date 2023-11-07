@@ -309,6 +309,14 @@ def train(data_loader,vald_loader, path_to_save_model=None):
             train_loss_best = running_loss/n
             train_loss_best_epoch = epoch
 
+            torch.save({
+              'epoch': epoch + 1,
+              'model_state_dict': model.state_dict(),
+              'optimizer_state_dict': optimizer.state_dict(),
+              'train_loss': train_loss,
+              'val_loss': val_loss
+              }, f"{ckpt_dir}/{model_name}_best_train_loss.pt")
+
           progress_bar.update(task_id=train_task, advance=1)
           progress_bar.update(task_id=epoch_task, advance=1/(n_train_batches + n_val_batches))
 
