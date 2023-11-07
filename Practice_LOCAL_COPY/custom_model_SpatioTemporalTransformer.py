@@ -159,6 +159,7 @@ log_step = 99999
 log_epoch = 1 
 
 train_id = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+print(f"Train ID: [bold][#FF1493]{train_id}")
 model_path= './checkpoints/' # path to the model checkpoint file
 model_name = datas+'_3d_'+str(output_n)+'frames_ckpt' #the model name to save/load
 ckpt_dir = f"{model_path}{train_id}"
