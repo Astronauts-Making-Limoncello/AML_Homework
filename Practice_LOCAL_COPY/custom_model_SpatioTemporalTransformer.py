@@ -53,7 +53,7 @@ dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=0, actions=ac
 vald_dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=1, actions=actions_to_consider_train)
 
 batch_size_test = batch_size = 256
-lim_n_batches_percent = 0.1
+lim_n_batches_percent = 0.999
 
 data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)#
 vald_loader = DataLoader(vald_dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)
@@ -81,7 +81,7 @@ out_features = 3
 
 use_skip_connection_encoder = False
 num_heads_encoder = 1
-num_encoder_blocks = 1
+num_encoder_blocks = 2
 
 st_encoder = SpatioTemporalEncoder(
     in_features, hidden_features, out_features, num_joints,
@@ -92,7 +92,7 @@ st_encoder = SpatioTemporalEncoder(
 
 use_skip_connection_decoder = False
 num_heads_decoder = 1
-num_decoder_blocks = 1
+num_decoder_blocks = 2
 
 st_decoder = SpatioTemporalDecoder(
     in_features, hidden_features, out_features, num_joints,
@@ -123,7 +123,7 @@ print(f"Number of trainable parameters: [b][#6495ED]{sum(p.numel() for p in mode
 
 ### --- OPTIMIZER --- ###
 
-lr=1e-3 
+lr=8e-3 
 weight_decay=1e-5 
 amsgrad=True
 momentum=0.3
@@ -140,8 +140,8 @@ optimizer=optim.Adam(model.parameters(),lr=lr,weight_decay=weight_decay, amsgrad
 
 ### --- LR SCHEDULER --- ###
 use_scheduler=False 
-milestones=[10]   # the epochs after which the learning rate is adjusted by gamma
-gamma=0.33 #gamma correction to the learning rate, after reaching the milestone epochs
+milestones=[40, 120, 240]   # the epochs after which the learning rate is adjusted by gamma
+gamma=0.5 #gamma correction to the learning rate, after reaching the milestone epochs
 step_size=10
 
 if use_scheduler:
@@ -154,7 +154,7 @@ if use_scheduler:
 
 ### --- TRAINING CONFIG --- ###
 
-n_epochs = 6
+n_epochs = 51
 log_step = 99999
 log_epoch = 1 
 
@@ -307,7 +307,6 @@ def train(data_loader,vald_loader, path_to_save_model=None):
 
           if running_loss/n < train_loss_best:
             train_loss_best = running_loss/n
-            train_loss_best_epoch = epoch
 
             torch.save({
               'epoch': epoch + 1,
@@ -362,7 +361,6 @@ def train(data_loader,vald_loader, path_to_save_model=None):
 
           if running_loss/n < val_loss_best:
             val_loss_best = running_loss/n
-            val_loss_best_epoch = epoch
 
             torch.save({
               'epoch': epoch + 1,
@@ -403,7 +401,7 @@ def train(data_loader,vald_loader, path_to_save_model=None):
         print(f"epoch: [bold][#B22222]{(epoch + 1):04}[/#B22222][/b] | train loss: [bold][#6495ED]{train_loss[-1]:07.3f}[/#6495ED][/b] | val loss: [b][#008080]{val_loss[-1]:07.3f}[/#008080][/b]")
       else:
         # print(f"epoch: [bold][#B22222]{(epoch + 1):04}[/#B22222][/b] | train loss: [bold][#6495ED]{train_loss[-1]:.3f}[/#6495ED][/b] ([#6495ED][b]{(train_loss[-1] - train_loss[-2]):.3f}[/#6495ED][/b]), best: {train_loss_best:.3f} | val loss: [b][#008080]{val_loss[-1]:.3f}[/#008080][/b] ([b][#008080]{(val_loss[-1] - val_loss[-2]):.3f}[/#008080][/b]), best: {val_loss_best:.3f}")
-        print(f"epoch: [bold][#B22222]{(epoch + 1):04}[/#B22222][/b] | train loss: [bold][#6495ED]{train_loss[-1]:07.3f}[/#6495ED][/b], best: {train_loss_best:07.3f} | val loss: [b][#008080]{val_loss[-1]:07.3f}[/#008080][/b], best: {val_loss_best:07.3f}")
+        print(f"epoch: [bold][#B22222]{(epoch + 1):04}[/#B22222][/b] | train loss: [bold][#6495ED]{train_loss[-1]:07.3f}[/#6495ED][/b], best (step): {train_loss_best:07.3f} | val loss: [b][#008080]{val_loss[-1]:07.3f}[/#008080][/b], best: {val_loss_best:07.3f}")
 
 
   wandb.log({
