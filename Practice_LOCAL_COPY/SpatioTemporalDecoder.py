@@ -3,9 +3,9 @@ import torch.nn as nn
 
 from SpatioTemporalDecoderBlock import SpatioTemporalDecoderBlock
 from utils.init_layer import conv_init, fc_init, bn_init, ln_init
+from utils.masking import causal_mask
 
 from rich import print
-
 
 
 class SpatioTemporalDecoder(nn.Module):
@@ -67,10 +67,7 @@ class SpatioTemporalDecoder(nn.Module):
         x = self.x_fc_out(x)
 
         return x
-    
-def causal_mask(mask_shape):
-    mask = torch.triu(torch.ones(mask_shape), diagonal=1).type(torch.int)
-    return mask == 0
+
 
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

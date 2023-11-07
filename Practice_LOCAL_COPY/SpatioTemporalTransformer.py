@@ -3,6 +3,7 @@ import torch.nn as nn
 
 from SpatioTemporalEncoder import SpatioTemporalEncoder
 from SpatioTemporalDecoder import SpatioTemporalDecoder
+from utils.masking import causal_mask
 
 from rich import print
 
@@ -17,10 +18,6 @@ def bn_init(bn, scale):
 def fc_init(fc):
     nn.init.xavier_normal_(fc.weight)
     nn.init.constant_(fc.bias, 0)
-
-def causal_mask(mask_shape):
-    mask = torch.triu(torch.ones(mask_shape), diagonal=1).type(torch.int)
-    return mask == 0
 
 class SpatioTemporalTransformer(nn.Module):
     def __init__(

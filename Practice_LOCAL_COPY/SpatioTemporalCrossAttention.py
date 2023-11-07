@@ -1,15 +1,10 @@
 import torch
 import torch.nn as nn
-
 from torch.nn.functional import softmax
 
-from pos_embed import Pos_Embed
+from utils.masking import causal_mask
 
 from rich import print
-
-def causal_mask(mask_shape):
-  mask = torch.triu(torch.ones(mask_shape), diagonal=1).type(torch.int)
-  return mask == 0
 
 # Adapted from original idea in Tang et. al 2023, "3D Human Pose Estimation with Spatio-Temporal Criss-Cross Attention"
 # Paper: https://ieeexplore.ieee.org/document/10204803
