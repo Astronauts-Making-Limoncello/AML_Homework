@@ -20,9 +20,16 @@ import wandb
 
 from rich import print
 
+### --- DEVICE --- ###
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print('Using device:', device,  '- Type:', torch.cuda.get_device_name(0))
+
+### --- DEVICE --- ###
+
+############################################################
+
+### --- DATA --- ###
 
 # # Arguments to setup the datasets
 datas = 'h36m' # dataset name
@@ -33,22 +40,7 @@ input_dim=3 # dimensions of the input coordinates(default=3)
 skip_rate=1 # # skip rate of frames
 joints_to_consider=22
 
-
-#FLAGS FOR THE TRAINING
-mode='train' #choose either train or test mode
-
-batch_size_test=8
-model_path= './checkpoints/' # path to the model checkpoint file
-
 actions_to_consider_test='all' # actions to test on.
-model_name = datas+'_3d_'+str(output_n)+'frames_ckpt' #the model name to save/load
-
-#FLAGS FOR THE VISUALIZATION
-actions_to_consider_viz='all' # actions to visualize
-visualize_from='test'
-n_viz=2
-
-### --- DATA --- ###
 
 # actions_to_consider_train = ["smoking"]
 actions_to_consider_train = None
@@ -62,7 +54,7 @@ dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=0, actions=ac
 print('Loading Validation Dataset...')
 vald_dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=1, actions=actions_to_consider_train)
 
-batch_size=256
+batch_size_test = batch_size = 256
 lim_n_batches_percent = 0.1
 
 print('>>> Training dataset length: {:d}'.format(dataset.__len__()))
@@ -172,6 +164,8 @@ log_step = 99999
 log_epoch = 1 
 
 train_id = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+model_path= './checkpoints/' # path to the model checkpoint file
+model_name = datas+'_3d_'+str(output_n)+'frames_ckpt' #the model name to save/load
 ckpt_dir = f"{model_path}{train_id}"
 os.makedirs(ckpt_dir) if not os.path.exists(ckpt_dir) else None
 
@@ -264,9 +258,7 @@ def train(data_loader,vald_loader, path_to_save_model=None):
   train_loss = []
   val_loss = []
   train_loss_best = 100000000
-  train_loss_best_epoch = -1
   val_loss_best   = 100000000
-  val_loss_best_epoch = -1
 
   dim_used = np.array([6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 21, 22, 23, 24, 25,
                     26, 27, 28, 29, 30, 31, 32, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45,
