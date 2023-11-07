@@ -400,9 +400,10 @@ def train(data_loader,vald_loader, path_to_save_model=None):
       })
 
       if epoch == 0:
-        print(f"epoch: [bold][#B22222]{epoch + 1}[/#B22222][/b], train loss: [bold][#6495ED]{train_loss[-1]:.3f}[/#6495ED][/b], val loss: [b][#008080]{val_loss[-1]:.3f}[/#008080][/b]")
+        print(f"epoch: [bold][#B22222]{(epoch + 1):04}[/#B22222][/b] | train loss: [bold][#6495ED]{train_loss[-1]:07.3f}[/#6495ED][/b] | val loss: [b][#008080]{val_loss[-1]:07.3f}[/#008080][/b]")
       else:
-        print(f"epoch: [bold][#B22222]{epoch + 1}[/#B22222][/b], train loss: [bold][#6495ED]{train_loss[-1]:.3f}[/#6495ED][/b] ([#6495ED][b]{(train_loss[-1] - train_loss[-2]):.3f}[/#6495ED][/b]), val loss: [b][#008080]{val_loss[-1]:.3f}[/#008080][/b] ([b][#008080]{(val_loss[-1] - val_loss[-2]):.3f}[/#008080][/b])")
+        # print(f"epoch: [bold][#B22222]{(epoch + 1):04}[/#B22222][/b] | train loss: [bold][#6495ED]{train_loss[-1]:.3f}[/#6495ED][/b] ([#6495ED][b]{(train_loss[-1] - train_loss[-2]):.3f}[/#6495ED][/b]), best: {train_loss_best:.3f} | val loss: [b][#008080]{val_loss[-1]:.3f}[/#008080][/b] ([b][#008080]{(val_loss[-1] - val_loss[-2]):.3f}[/#008080][/b]), best: {val_loss_best:.3f}")
+        print(f"epoch: [bold][#B22222]{(epoch + 1):04}[/#B22222][/b] | train loss: [bold][#6495ED]{train_loss[-1]:07.3f}[/#6495ED][/b], best: {train_loss_best:07.3f} | val loss: [b][#008080]{val_loss[-1]:07.3f}[/#008080][/b], best: {val_loss_best:07.3f}")
 
 
   wandb.log({
