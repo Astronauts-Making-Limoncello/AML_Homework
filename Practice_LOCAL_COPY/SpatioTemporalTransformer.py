@@ -36,13 +36,18 @@ class SpatioTemporalTransformer(nn.Module):
                 fc_init(m)
         
 
-    def forward(self, src: Tensor, tgt: Tensor, tgt_mask_s: Optional[Tensor]=None, tgt_mask_t: Optional[Tensor]=None):
+    def forward(
+        self, 
+        src: Tensor, tgt: Tensor, 
+        src_mask_s: Optional[Tensor]=None, src_mask_t: Optional[Tensor]=None,
+        tgt_mask_s: Optional[Tensor]=None, tgt_mask_t: Optional[Tensor]=None
+    ):
 
         # print(f"\[SpatioTemporalTransformer.forward] src.shape: {src.shape}")
         # print(f"\[SpatioTemporalTransformer.forward] tgt.shape: {tgt.shape}")
 
         encoder_output = self.st_encoder.forward(
-            encoder_input=src, mask_s=None, mask_t=None
+            encoder_input=src, mask_s=src_mask_s, mask_t=src_mask_t
         )
         encoder_output = encoder_output.view(-1, self.num_frames, self.num_joints, self.in_features)
         # print(f"\[SpatioTemporalTransformer.forward] encoder_output.shape: {encoder_output.shape}")
@@ -84,6 +89,9 @@ def main():
         num_encoder_blocks
     )
 
+    encoder_mask_s = None
+    encoder_mask_t = None
+
     num_decoder_blocks = 3
 
     st_decoder = SpatioTemporalDecoder(
@@ -116,6 +124,7 @@ def main():
 
     decoder_output = st_transformer.forward(
         src=src, tgt=tgt,
+        src_mask_s=encoder_mask_s, src_mask_t=encoder_mask_t,
         tgt_mask_s=decoder_mask_s, tgt_mask_t=decoder_mask_t
     )
     print(f"decoder_output: {decoder_output.shape}")

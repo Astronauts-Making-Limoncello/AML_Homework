@@ -90,6 +90,9 @@ st_encoder = SpatioTemporalEncoder(
     num_encoder_blocks
 )
 
+encoder_mask_s = None
+encoder_mask_t = None
+
 use_skip_connection_decoder = False
 num_heads_decoder = 1
 num_decoder_blocks = 2
@@ -285,6 +288,7 @@ def train(data_loader,vald_loader, path_to_save_model=None):
           optimizer.zero_grad()
           sequences_predict=model(
             src=sequences_train, tgt=sequences_gt, 
+            src_mask_s=encoder_mask_s, src_mask_t=encoder_mask_t,
             tgt_mask_s=decoder_mask_s, tgt_mask_t=decoder_mask_t
           )
           # print(f"\[main.train] sequences_predict.shape: {sequences_predict.shape}")
