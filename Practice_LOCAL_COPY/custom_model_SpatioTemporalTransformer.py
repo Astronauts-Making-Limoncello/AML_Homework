@@ -46,21 +46,16 @@ actions_to_consider_test='all' # actions to test on.
 actions_to_consider_train = None
 
 if actions_to_consider_train is not None:
-  print(f"[b][#FF0000]ACTIONS_TO_CONSIDER_TRAIN: {actions_to_consider_train}")
+  print(f"[b][#FF0000]WARNING: training only on these actions --> {actions_to_consider_train}")
 
 # Load Data
-print('Loading Train Dataset...')
 dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=0, actions=actions_to_consider_train)
-print('Loading Validation Dataset...')
 vald_dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=1, actions=actions_to_consider_train)
 
 batch_size_test = batch_size = 256
 lim_n_batches_percent = 0.1
 
-print('>>> Training dataset length: {:d}'.format(dataset.__len__()))
 data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)#
-
-print('>>> Validation dataset length: {:d}'.format(vald_dataset.__len__()))
 vald_loader = DataLoader(vald_dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)
 
 ### --- DATA --- ###
@@ -81,7 +76,7 @@ num_frames_out = 25
 # spatial dimensionalities
 num_joints = 22
 in_features = 3
-hidden_features = 64
+hidden_features = 32
 out_features = 3
 
 use_skip_connection_encoder = False
@@ -120,7 +115,7 @@ model = st_transformer = SpatioTemporalTransformer(
     num_frames=num_frames, num_joints=num_joints, in_features=in_features
 ).to(device)
 
-print('Num trainable parameters: '+str(sum(p.numel() for p in model.parameters() if p.requires_grad)))
+print(f"Number of trainable parameters: [b][#6495ED]{sum(p.numel() for p in model.parameters() if p.requires_grad)}")
 
 ### --- MODEL --- ###
 
