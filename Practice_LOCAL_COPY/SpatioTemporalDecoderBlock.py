@@ -38,7 +38,7 @@ class SpatioTemporalDecoderBlock(nn.Module):
             elif isinstance(m, nn.BatchNorm2d):
                 bn_init(m, 1)
             elif isinstance(m, nn.LayerNorm):
-                bn_init(m, 1)
+                ln_init(m, 1)
             elif isinstance(m, nn.Linear):
                 fc_init(m)
             
