@@ -52,13 +52,13 @@ class SpatioTemporalTransformer(nn.Module):
         # print(f"\[SpatioTemporalTransformer.forward] tgt.shape: {tgt.shape}")
 
         encoder_output = self.st_encoder.forward(
-            src, src, mask_s=None, mask_t=None
+            encoder_input=src, mask_s=None, mask_t=None
         )
         encoder_output = encoder_output.view(-1, self.num_frames, self.num_joints, self.in_features)
         # print(f"\[SpatioTemporalTransformer.forward] encoder_output.shape: {encoder_output.shape}")
 
         decoder_output = self.st_decoder.forward(
-            tgt, encoder_output, 
+            decoder_input=tgt, encoder_output=encoder_output, 
             mask_s=tgt_mask_s, mask_t=tgt_mask_t
         )
         # print(f"\[SpatioTemporalTransformer.forward] decoder_output.shape: {decoder_output.shape}")

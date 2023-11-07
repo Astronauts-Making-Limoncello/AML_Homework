@@ -49,7 +49,7 @@ class SpatioTemporalCrossAttention(nn.Module):
             kernel_size=1
         )
 
-    def forward(self, x, encoder_output, mask_s, mask_t):
+    def forward(self, q, k, v, mask_s, mask_t):
         # x.shape             : b, num_frames_out, num_joints, in_features
         # encoder_output.shape: b, num_frames    , num_joints, in_features
         
@@ -60,14 +60,14 @@ class SpatioTemporalCrossAttention(nn.Module):
         # s --> spacial size/dimension  (default: 22 joints)
         # f --> feature size/dimension  (default: 3, the x, y and z coordinates of the joints)
 
-        assert x.shape[0] == encoder_output.shape[0], "x and encoder_output should have the same batch size"
+        assert q.shape[0] == k.shape[0] == v.shape[0], "q, k and v should have the same batch size"
 
-        batch_size = x.shape[0]
+        batch_size = q.shape[0]
 
         # applying q, k and v transformations
-        q = self.Wq(x)
-        k = self.Wk(encoder_output)
-        v = self.Wv(encoder_output)
+        q = self.Wq(q)
+        k = self.Wk(k)
+        v = self.Wv(v)
         # q.shape      : b, num_frames_out, num_joints, out_features
         # k and v shape: b, num_frames    , num_joints, out_features
 
@@ -194,7 +194,7 @@ if __name__ == "__main__":
     decoder_mask_t = causal_mask((1, 1, 1, num_frames_out, num_frames)).to(device)
 
     st_cross_attn = spatio_temporal_cross_attention(
-        x=tgt, encoder_output=encoder_output, 
+        q=tgt, k=encoder_output, v=encoder_output, 
         mask_s=decoder_mask_s, mask_t=decoder_mask_t
     )
 

@@ -21,7 +21,7 @@ class SpatioTemporalDecoder(nn.Module):
 
         self.num_joints = num_joints
 
-        self.x_fc_in              = nn.Linear(in_features, hidden_features)
+        self.decoder_input_fc_in  = nn.Linear(in_features, hidden_features)
         self.encoder_output_fc_in = nn.Linear(in_features, hidden_features)
 
         self.decoder_blocks = nn.Sequential()
@@ -52,14 +52,14 @@ class SpatioTemporalDecoder(nn.Module):
                 fc_init(m)
             
             
-    def forward(self, x, encoder_output, mask_s, mask_t):
+    def forward(self, decoder_input, encoder_output, mask_s, mask_t):
 
-        x = self.x_fc_in(x)
+        decoder_input  = self.decoder_input_fc_in(decoder_input)
         encoder_output = self.encoder_output_fc_in(encoder_output)
 
         for decoder_block in self.decoder_blocks:
             x = decoder_block.forward(
-                x, encoder_output, mask_s=mask_s, mask_t=mask_t
+                decoder_input, encoder_output, mask_s=mask_s, mask_t=mask_t
             )
             
 
@@ -96,12 +96,12 @@ def main():
     )
 
     batch_size = 256
+    # decoder input must come with in_features, because it comes directly from the
+    # dataset!
+    decoder_input  = torch.rand((batch_size, num_frames_out, num_joints, in_features)) 
     # encoder output must come already mapped to hidden features, because it is
     # supposed to come out of the encoder
     encoder_output = torch.rand((batch_size, num_frames    , num_joints, in_features))
-    # decoder input must come with in_features, because it comes directly from the
-    # dataset!
-    x              = torch.rand((batch_size, num_frames_out, num_joints, in_features)) 
 
     # alternative POV (referencing this Transformer implementaiton https://github.com/hkproj/pytorch-transformer): 
     # seq_len is num_frames_out in decoder, so gotta use num_frames_out
@@ -114,7 +114,7 @@ def main():
     # first three dimensions set to 1 are for: batch, heads and space
     mask_t = causal_mask((1, 1, 1, num_frames_out, num_frames))
 
-    x = spatio_temporal_decoder.forward(x, encoder_output, mask_s, mask_t)
+    x = spatio_temporal_decoder.forward(decoder_input, encoder_output, mask_s, mask_t)
 
     print(f"x.shape: {x.shape}")
 

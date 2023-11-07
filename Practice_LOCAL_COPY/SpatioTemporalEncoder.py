@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from SpatioTemporalDecoderBlock import SpatioTemporalDecoderBlock
+from SpatioTemporalEncoderBlock import SpatioTemporalEncoderBlock
 from utils.init_layer import conv_init, fc_init, bn_init, ln_init
 
 from rich import print
@@ -19,24 +19,21 @@ class SpatioTemporalEncoder(nn.Module):
     ):
         super().__init__()
 
-        self.num_joints = num_joints
-
-        self.x_fc_in              = nn.Linear(in_features, hidden_features)
-        self.encoder_output_fc_in = nn.Linear(in_features, hidden_features)
+        self.encoder_input_fc_in = nn.Linear(in_features, hidden_features)
 
         self.encoder_blocks = nn.Sequential()
         for encoder_block_id in range(num_encoder_blocks):
             
             self.encoder_blocks.add_module(
                 f"encoder_block_{encoder_block_id}",
-                SpatioTemporalDecoderBlock(
+                SpatioTemporalEncoderBlock(
                     in_features=hidden_features, out_features=hidden_features, num_joints=num_joints, 
                     num_frames=num_frames, num_frames_out=num_frames_out, 
                     num_heads=num_heads, use_skip_connection=use_skip_connection
                 )
             )
 
-        self.x_fc_out = nn.Linear(hidden_features, out_features)
+        self.encoder_output_fc_out = nn.Linear(hidden_features, out_features)
             
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -52,20 +49,18 @@ class SpatioTemporalEncoder(nn.Module):
                 fc_init(m)
             
             
-    def forward(self, x, encoder_output, mask_s, mask_t):
-        x = self.x_fc_in(x)
-        encoder_output = self.encoder_output_fc_in(encoder_output)
+    def forward(self, encoder_input, mask_s, mask_t):
+       
+        encoder_input = self.encoder_input_fc_in(encoder_input)
 
         for encoder_block in self.encoder_blocks:
-            x = encoder_block.forward(
-                x, encoder_output, mask_s=mask_s, mask_t=mask_t
+            encoder_output = encoder_block.forward(
+                encoder_input, mask_s=mask_s, mask_t=mask_t
             )
             
+        encoder_output = self.encoder_output_fc_out(encoder_output)
 
-
-        x = self.x_fc_out(x)
-
-        return x
+        return encoder_output
     
 def causal_mask(mask_shape):
     mask = torch.triu(torch.ones(mask_shape), diagonal=1).type(torch.int)
@@ -97,7 +92,7 @@ def main():
     batch_size = 256
     # encoder input must come with in_features, because it comes directly from the
     # dataset!
-    x              = torch.rand((batch_size, num_frames, num_joints, in_features)) 
+    encoder_input = torch.rand((batch_size, num_frames, num_joints, in_features)) 
 
     # alternative POV (referencing this Transformer implementaiton https://github.com/hkproj/pytorch-transformer): 
     # seq_len is num_frames_out in encoder, so gotta use num_frames_out
@@ -112,7 +107,7 @@ def main():
     mask_t = None
     # mask_t = causal_mask((1, 1, 1, num_frames_out, num_frames))
 
-    x = spatio_temporal_encoder.forward(x, x, mask_s, mask_t)
+    x = spatio_temporal_encoder.forward(encoder_input, mask_s, mask_t)
 
     print(f"x.shape: {x.shape}")
 

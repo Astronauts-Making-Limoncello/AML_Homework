@@ -8,7 +8,7 @@ from utils.init_layer import conv_init, bn_init, ln_init, fc_init
 from rich import print
 
 # taken as is from CVPR'23 reference paper https://github.com/zhenhuat/STCFormer
-class SpatioTemporalDecoderBlock(nn.Module):
+class SpatioTemporalEncoderBlock(nn.Module):
   
     def __init__(
         self, 
@@ -43,32 +43,31 @@ class SpatioTemporalDecoderBlock(nn.Module):
                 fc_init(m)
             
             
-    def forward(self, decoder_input, encoder_output, mask_s, mask_t):
-        #  decoder_input.shape: batch_size, temporal_dim, spatial_dim, feature_dim
-        # encoder_output.shape: batch_size, temporal_dim, spatial_dim, feature_dim
+    def forward(self, encoder_input, mask_s, mask_t):
+        # encoder_input.shape: batch_size, temporal_dim, spatial_dim, feature_dim
         
-        dec_inp_for_skip_connection = decoder_input
+        enc_inp_for_skip_connection = encoder_input
 
-        decoder_input = self.layer_norm_1(decoder_input)
+        encoder_input = self.layer_norm_1(encoder_input)
 
-        decoder_input = self.spatio_temporal_cross_attention(
-            q=decoder_input, k=encoder_output, v=encoder_output, 
+        encoder_input = self.spatio_temporal_cross_attention(
+            q=encoder_input, k=encoder_input, v=encoder_input, 
             mask_s=mask_s, mask_t=mask_t
         )
 
         if self.use_skip_connection:
-            decoder_input = decoder_input + dec_inp_for_skip_connection
+            encoder_input = encoder_input + enc_inp_for_skip_connection
 
-        dec_inp_for_skip_connection = decoder_input
+        enc_inp_for_skip_connection = encoder_input
 
-        decoder_input = self.layer_norm_2(decoder_input)
+        encoder_input = self.layer_norm_2(encoder_input)
 
-        decoder_input = self.mlp(decoder_input)
+        encoder_output = self.mlp(encoder_input)
 
         if self.use_skip_connection:
-            decoder_input = decoder_input + dec_inp_for_skip_connection
+            encoder_output = encoder_output + enc_inp_for_skip_connection
 
-        return decoder_input
+        return encoder_output
     
     
 
