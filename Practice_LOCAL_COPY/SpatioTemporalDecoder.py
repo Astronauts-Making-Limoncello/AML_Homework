@@ -14,7 +14,8 @@ class SpatioTemporalDecoder(nn.Module):
   
     def __init__(
         self, 
-        in_features: int, hidden_features: int, out_features: int, num_joints: int,
+        decoder_input_in_features: int, encoder_output_in_features: int,
+        hidden_features: int, out_features: int, num_joints: int,
         num_frames: int, num_frames_out: int,
         num_heads: int, use_skip_connection: bool,
         num_decoder_blocks: int
@@ -23,8 +24,8 @@ class SpatioTemporalDecoder(nn.Module):
 
         self.num_joints = num_joints
 
-        self.decoder_input_fc_in  = nn.Linear(in_features, hidden_features)
-        self.encoder_output_fc_in = nn.Linear(in_features, hidden_features)
+        self.decoder_input_fc_in  = nn.Linear(decoder_input_in_features, hidden_features)
+        self.encoder_output_fc_in = nn.Linear(encoder_output_in_features, hidden_features)
 
         self.decoder_blocks = nn.Sequential()
         for decoder_block_id in range(num_decoder_blocks):

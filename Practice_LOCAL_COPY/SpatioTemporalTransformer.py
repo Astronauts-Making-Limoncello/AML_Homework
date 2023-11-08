@@ -14,7 +14,8 @@ class SpatioTemporalTransformer(nn.Module):
     def __init__(
         self, 
         st_encoder: SpatioTemporalEncoder, st_decoder: SpatioTemporalDecoder,
-        num_frames: int, num_joints: int, in_features: int
+        num_frames: int, num_joints: int, 
+        in_features_encoder: int, in_features_decoder: int
     ):
         super().__init__()
 
@@ -23,7 +24,8 @@ class SpatioTemporalTransformer(nn.Module):
 
         self.num_frames = num_frames
         self.num_joints = num_joints
-        self.in_features = in_features
+        self.in_features_encoder = in_features_encoder
+        self.in_features_decoder = in_features_decoder
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -49,7 +51,7 @@ class SpatioTemporalTransformer(nn.Module):
         encoder_output = self.st_encoder.forward(
             encoder_input=src, mask_s=src_mask_s, mask_t=src_mask_t
         )
-        encoder_output = encoder_output.view(-1, self.num_frames, self.num_joints, self.in_features)
+        encoder_output = encoder_output.view(-1, self.num_frames, self.num_joints, self.in_features_decoder)
         # print(f"\[SpatioTemporalTransformer.forward] encoder_output.shape: {encoder_output.shape}")
 
         decoder_output = self.st_decoder.forward(
@@ -72,9 +74,11 @@ def main():
     
     # spatial 
     num_joints = 22
-    in_features = 3
+    in_features_encoder = 3
+    in_features_decoder = 4
     hidden_features = 128
-    out_features = 3
+    out_features_encoder = 4
+    out_features_decoder = 4
 
     # model
     num_heads = 8
@@ -83,7 +87,7 @@ def main():
     num_encoder_blocks = 3
 
     st_encoder = SpatioTemporalEncoder(
-        in_features, hidden_features, out_features, num_joints,
+        in_features_encoder, hidden_features, out_features_encoder, num_joints,
         num_frames, num_frames, # it's encoder, so num_frames_out == num_frames
         num_heads, use_skip_connection,
         num_encoder_blocks
@@ -95,7 +99,7 @@ def main():
     num_decoder_blocks = 3
 
     st_decoder = SpatioTemporalDecoder(
-        in_features, hidden_features, out_features, num_joints,
+        in_features_decoder, hidden_features, out_features_decoder, num_joints,
         num_frames, num_frames_out,
         num_heads, use_skip_connection,
         num_decoder_blocks
@@ -114,13 +118,14 @@ def main():
 
     st_transformer = SpatioTemporalTransformer(
         st_encoder=st_encoder, st_decoder=st_decoder,
-        num_frames=num_frames, num_joints=num_joints, in_features=in_features, 
+        num_frames=num_frames, num_joints=num_joints, 
+        in_features_encoder=in_features_encoder, in_features_decoder=in_features_decoder, 
     ).to(device)
 
     batch_size = 256
     # src = torch.rand((batch_size, in_features, num_frames, num_joints)).to(device)
-    src = torch.rand((batch_size, num_frames    , num_joints, in_features)).to(device)
-    tgt = torch.rand((batch_size, num_frames_out, num_joints, in_features)).to(device)
+    src = torch.rand((batch_size, num_frames    , num_joints, in_features_encoder)).to(device)
+    tgt = torch.rand((batch_size, num_frames_out, num_joints, in_features_decoder)).to(device)
 
     decoder_output = st_transformer.forward(
         src=src, tgt=tgt,
