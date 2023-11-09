@@ -359,22 +359,51 @@ def train(data_loader,vald_loader, path_to_save_model=None):
           # print(f"\[main.train] sequences_gt.shape: {sequences_gt.shape}")
 
           if autoregression:
+
+            # working on a copy of sequences_gt so as we keep the original untoched for the loss computation
+            # and to keep compatibility for when autoregression=False
+            sequences_gt_autoregression = batch[:, input_n:input_n+output_n, dim_used].view(-1,output_n,len(dim_used)//3,3)
+
             # adding num_special_tokens extra features
             # to accomodate encoding of special tokens (start of sequence, end of sequence)
             in_features_pad_tgt = torch.zeros(
               batch_size_current_batch, output_n, num_joints, num_special_tokens_decoder
             ).to(device)
-            sequences_gt = torch.cat((sequences_gt, in_features_pad_tgt), dim=-1)
-            # print(f"sequences_gt.shape: {sequences_gt.shape}")
+            sequences_gt_autoregression = torch.cat((sequences_gt_autoregression, in_features_pad_tgt), dim=-1)
+            # print(f"sequences_gt_autoregression.shape: {sequences_gt_autoregression.shape}")
 
             if use_start_of_sequence_token_in_decoder:
-              # creating the one-hot encoding token vector
-              sequences_gt[:, 0, :, in_features+start_of_sequence_token_offset] = 1.
-              # print(f"sequences_gt.shape: {sequences_gt.shape}")
+              
+              # removing last element of gt sequence, in order to shift gt sequence to right by one position
+              # by means of adding the start of sequence token
+              sequences_gt_autoregression = sequences_gt_autoregression[:, :-1, :, :]
+              # print(f"sequences_gt_autoregression.shape: {sequences_gt_autoregression.shape}")
+
+              # creating the start of sequence token
+              # see autoregression section comments of report for full detail on shapes, etc.
+              start_of_sequence_token_decoder = torch.zeros(
+                (batch_size_current_batch, 1, num_joints, in_features_decoder)
+              ).to(device)
+              # print(f"start_of_sequence_token_decoder.shape: {start_of_sequence_token_decoder.shape}")
+              
+              # concatenating sequences_gt_autoregression to start_of_sequence_token along the temporal dimension
+              # effectively shifts the output by 1 position, by means of adding the
+              # start of sequence token
+              sequences_gt_autoregression = torch.cat(
+                tensors=(start_of_sequence_token_decoder, sequences_gt_autoregression),
+                dim=1 
+              )
+              # print(f"sequences_gt_autoregression.shape: {sequences_gt_autoregression.shape}")
+
+              # feature vector of special token (which is concatenated to feature vector of data!)
+              # is a one-hot encoding vector, where each special token type has its own dimension set to 1
+              # so, setting to 1 the dimension of the start_of_sequence special token to 1
+              sequences_gt_autoregression[:, 0, :, in_features+start_of_sequence_token_offset] = 1.
 
           optimizer.zero_grad()
           sequences_predict=model(
-            src=sequences_train, tgt=sequences_gt, 
+            src=sequences_train, 
+            tgt=sequences_gt_autoregression if autoregression else sequences_gt, 
             src_mask_s=encoder_mask_s, src_mask_t=encoder_mask_t,
             tgt_mask_s=decoder_mask_s, tgt_mask_t=decoder_mask_t
           )
@@ -385,15 +414,13 @@ def train(data_loader,vald_loader, path_to_save_model=None):
             # get appended to the end of the in_feature-long feature vector
             # so, using slicing, we can separate feature vector from special token encoding vectors
              
-            sequences_predict_special_tokens = sequences_predict[:, :, :, in_features:]
-            sequences_gt_special_tokens      =      sequences_gt[:, :, :, in_features:]
+            sequences_predict_special_tokens =           sequences_predict[:, :, :, in_features:]
+            sequences_gt_special_tokens      = sequences_gt_autoregression[:, :, :, in_features:]
             # print(f"\[main.train] sequences_predict_special_tokens.shape: {sequences_predict_special_tokens.shape}")
             # print(f"\[main.train] sequences_gt_special_tokens.shape     : {sequences_gt_special_tokens.shape}")
             
             sequences_predict = sequences_predict[:, :, :, :in_features]
-            sequences_gt      =      sequences_gt[:, :, :, :in_features]
             # print(f"\[main.train] sequences_predict.shape: {sequences_predict.shape}")
-            # print(f"\[main.train] sequences_gt.shape     : {sequences_gt.shape}")
 
 
           loss = mpjpe_error(sequences_predict,sequences_gt)
@@ -401,10 +428,10 @@ def train(data_loader,vald_loader, path_to_save_model=None):
           if autoregression:
             loss_2 = torch.nn.functional.cross_entropy(
               input=sequences_predict_special_tokens.reshape(
-                -1, num_frames_out * num_joints, num_special_tokens_decoder
+                batch_size_current_batch, num_frames_out * num_joints, num_special_tokens_decoder
               ), 
               target=sequences_gt_special_tokens.reshape(
-                -1, num_frames_out * num_joints, num_special_tokens_decoder
+                batch_size_current_batch, num_frames_out * num_joints, num_special_tokens_decoder
               ),
 
             )
