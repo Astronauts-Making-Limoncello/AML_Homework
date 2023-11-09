@@ -127,9 +127,6 @@ if autoregression:
   out_features_encoder += num_special_tokens_encoder if (use_special_tokens_encoder) else 0
   out_features_decoder += num_special_tokens_decoder if (use_special_tokens_decoder) else 0
 
-  # to add num_special_tokens features to accomodate concat of vectors representing special tokens
-  in_features_pad_tgt = torch.zeros(batch_size, output_n, num_joints, num_special_tokens_decoder).to(device)
-
   # offset to apply to in_feature to index each special token
   # special tokens are identified by num_special_tokens{encoder,decoder} one-hot encoding vectors
   # so we keep track of what index in the one-hot encoding vector is actually indexing what token
@@ -227,7 +224,7 @@ if use_scheduler:
 
 ### --- TRAINING CONFIG --- ###
 
-n_epochs = 51
+n_epochs = 3
 log_step = 99999
 log_epoch = 1 
 
@@ -346,6 +343,7 @@ def train(data_loader,vald_loader, path_to_save_model=None):
       n=0
       model.train()
       for cnt,batch in list(enumerate(data_loader))[:n_train_batches]:
+          batch_size_current_batch = batch.shape[0]
           batch=batch.float().to(device)
           batch_dim=batch.shape[0]
           n+=batch_dim
@@ -353,7 +351,7 @@ def train(data_loader,vald_loader, path_to_save_model=None):
           # NOTE: encoders based on their code require the permute
           # sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3).permute(0,3,1,2)
           # NOTE: encoders based on our code do NOT require the permute
-          sequences_train = batch[:, 0:input_n, dim_used].view(batch_size, input_n, num_joints, 3)
+          sequences_train = batch[:, 0:input_n, dim_used].view(-1, input_n, num_joints, 3)
           # print(f"\[main.train] sequences_train.shape: {sequences_train.shape}")
           # sequences_train.shape: batch_size, input_n, num_joints, in_features
 
@@ -363,17 +361,16 @@ def train(data_loader,vald_loader, path_to_save_model=None):
           if autoregression:
             # adding num_special_tokens extra features
             # to accomodate encoding of special tokens (start of sequence, end of sequence)
+            in_features_pad_tgt = torch.zeros(
+              batch_size_current_batch, output_n, num_joints, num_special_tokens_decoder
+            ).to(device)
             sequences_gt = torch.cat((sequences_gt, in_features_pad_tgt), dim=-1)
-            print(f"sequences_gt.shape: {sequences_gt.shape}")
+            # print(f"sequences_gt.shape: {sequences_gt.shape}")
 
             if use_start_of_sequence_token_in_decoder:
               # creating the one-hot encoding token vector
               sequences_gt[:, 0, :, in_features+start_of_sequence_token_offset] = 1.
-              print(f"sequences_gt.shape: {sequences_gt.shape}")
-              print(f"{sequences_gt}")
-          
-          exit()
-            
+              # print(f"sequences_gt.shape: {sequences_gt.shape}")
 
           optimizer.zero_grad()
           sequences_predict=model(
@@ -382,11 +379,38 @@ def train(data_loader,vald_loader, path_to_save_model=None):
             tgt_mask_s=decoder_mask_s, tgt_mask_t=decoder_mask_t
           )
           # print(f"\[main.train] sequences_predict.shape: {sequences_predict.shape}")
-          sequences_predict=sequences_predict.view(-1, output_n, joints_to_consider, 3)
-          # print(f"\[main.train] sequences_predict.shape: {sequences_predict.shape}")
+
+          if autoregression:
+            # special token num_special_token_{encoder,decoder}-long vectors 
+            # get appended to the end of the in_feature-long feature vector
+            # so, using slicing, we can separate feature vector from special token encoding vectors
+             
+            sequences_predict_special_tokens = sequences_predict[:, :, :, in_features:]
+            sequences_gt_special_tokens      =      sequences_gt[:, :, :, in_features:]
+            # print(f"\[main.train] sequences_predict_special_tokens.shape: {sequences_predict_special_tokens.shape}")
+            # print(f"\[main.train] sequences_gt_special_tokens.shape     : {sequences_gt_special_tokens.shape}")
+            
+            sequences_predict = sequences_predict[:, :, :, :in_features]
+            sequences_gt      =      sequences_gt[:, :, :, :in_features]
+            # print(f"\[main.train] sequences_predict.shape: {sequences_predict.shape}")
+            # print(f"\[main.train] sequences_gt.shape     : {sequences_gt.shape}")
 
 
-          loss=mpjpe_error(sequences_predict,sequences_gt)
+          loss = mpjpe_error(sequences_predict,sequences_gt)
+          
+          if autoregression:
+            loss_2 = torch.nn.functional.cross_entropy(
+              input=sequences_predict_special_tokens.reshape(
+                -1, num_frames_out * num_joints, num_special_tokens_decoder
+              ), 
+              target=sequences_gt_special_tokens.reshape(
+                -1, num_frames_out * num_joints, num_special_tokens_decoder
+              ),
+
+            )
+
+          if autoregression:
+            loss += loss_2
 
 
         #   if cnt % log_step == 0:
@@ -415,6 +439,8 @@ def train(data_loader,vald_loader, path_to_save_model=None):
 
 
       train_loss.append(running_loss.detach().cpu()/n)
+
+      continue
 
       model.eval()
       with torch.no_grad():
