@@ -20,6 +20,8 @@ class SpatioTemporalDecoderBlock(nn.Module):
     ):
         super().__init__()
 
+        self.num_frames_out = num_frames_out
+
         self.use_skip_connection = use_skip_connection
 
         self.layer_norm_1 = nn.LayerNorm(in_features)

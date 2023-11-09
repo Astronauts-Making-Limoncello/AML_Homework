@@ -5,9 +5,16 @@
 
 
 import torch
+from torch import Tensor
 from utils import data_utils
 
+def l2_error(batch_pred: Tensor, batch_gt: Tensor, feature_size: int):
+    
+    batch_pred=batch_pred.contiguous().view(-1, feature_size)
+    batch_gt=batch_gt.contiguous().view(-1, feature_size)
 
+    return torch.mean(torch.norm(input=batch_gt-batch_pred, p=2, dim=1))
+    
 
 def mpjpe_error(batch_pred,batch_gt): 
 

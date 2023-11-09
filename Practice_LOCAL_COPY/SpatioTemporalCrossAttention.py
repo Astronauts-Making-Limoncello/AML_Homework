@@ -46,7 +46,9 @@ class SpatioTemporalCrossAttention(nn.Module):
             kernel_size=1
         )
 
-    def forward(self, q: Tensor, k: Tensor, v: Tensor, mask_s: Optional[Tensor]=None, mask_t: Optional[Tensor]=None):
+    def forward(
+        self, q: Tensor, k: Tensor, v: Tensor, mask_s: Optional[Tensor]=None, mask_t: Optional[Tensor]=None,
+    ):
         # x.shape             : b, num_frames_out, num_joints, in_features
         # encoder_output.shape: b, num_frames    , num_joints, in_features
         
@@ -57,7 +59,7 @@ class SpatioTemporalCrossAttention(nn.Module):
         # s --> spacial size/dimension  (default: 22 joints)
         # f --> feature size/dimension  (default: 3, the x, y and z coordinates of the joints)
 
-        assert q.shape[0] == k.shape[0] == v.shape[0], "q, k and v should have the same batch size"
+        assert q.shape[0] == k.shape[0] == v.shape[0], f"q, k and v should have the same batch size. Got instead {q.shape[0]}, {k.shape[0]} and {v.shape[0]}"
 
         batch_size = q.shape[0]
 
@@ -68,7 +70,15 @@ class SpatioTemporalCrossAttention(nn.Module):
         # q.shape      : b, num_frames_out, num_joints, out_features
         # k and v shape: b, num_frames    , num_joints, out_features
 
+        temporal_size = q.shape[1]
+
         # splitting into heads
+        # q = q.reshape(batch_size, self.num_heads, self.num_frames_out, self.num_joints, self.hidden_features)
+        # using -1 instead of self.num_frames_out in order to be flexible to whatever number of frames
+        # this flexibility is needed in autoregressive paradigms
+        # NOTE this could be achieved by requiring num_frames_out in the forward pass,
+        # NOTE but for now this approach works ok, since there's this comment explaining it :)
+        # q = q.reshape(batch_size, self.num_heads,                  -1, self.num_joints, self.hidden_features)
         q = q.reshape(batch_size, self.num_heads, self.num_frames_out, self.num_joints, self.hidden_features)
         k = k.reshape(batch_size, self.num_heads, self.num_frames    , self.num_joints, self.hidden_features)
         v = v.reshape(batch_size, self.num_heads, self.num_frames    , self.num_joints, self.hidden_features)
@@ -142,7 +152,40 @@ class SpatioTemporalCrossAttention(nn.Module):
         x_t = x_t.permute(0, 1, 3, 2, 4)
         # generic shape of the transformation: (b, h, s, t, hidden_features_t) --> (b, h, t, s, hidden_features_t)
 
-        x = torch.cat((x_s, x_t), dim=-1)
+        # in order to handle autoregression evaluation, gotta be able to handle temporal size in a dynamic way 
+        # in fact, in autoregression, temporal dimension is not fixed, but it grows predicted token after predicted token 
+        
+        # x_t is the one suffering from the growing temporal size problem in autoregression,
+        # so concatenating x_s as is to x_t, in autoregression, will not work, because of the different temporal size
+        # here's how we decided to solve this:
+        #   - create two x_s chunks, one up to the temporal size and one from temporal size to the end
+        #   - concatenate x_s_up_to_temporal_size with x_t as is, because the temporal size matches
+        #   - concatenate x_s_after_temporal_size with zero valued features
+        #   - reunite the two x_s chunks
+        # the last choice is because after temporal size, temporal attention has not been computed
+        # so, we set its vector to zero
+        # we decided to explicit all steps to be as transparent and clear as possible
+
+        # get up to temporal size chunk for x_s
+        x_s_up_to_temporal_size = x_s[:, :, :temporal_size, :, :]
+        # print(f"x_s_up_to_temporal_size.shape: {x_s_up_to_temporal_size.shape}")
+        
+        # concatenate temporal attention features up to temporal size to x_s
+        x_up_to_temporal_size = torch.cat((x_s_up_to_temporal_size, x_t), dim=-1)
+        # print(f"x_up_to_temporal_size.shape  : {x_up_to_temporal_size.shape}")
+
+        # get after temporal size chunk for x_s
+        x_s_after_temporal_size = x_s[:, :, temporal_size:, :, :]
+        # print(f"x_s_after_temporal_size.shape: {x_s_after_temporal_size.shape}")
+
+        # concatenate temporal attention features after temporal size to x_s
+        x_after_temporal_size = torch.cat((x_s[:, :, temporal_size:, :, :], torch.zeros_like(x_s_after_temporal_size)), dim=-1)
+        # print(f"x_after_temporal_size.shape  : {x_after_temporal_size.shape}")
+
+        # merge the two x chunks
+        x = torch.cat((x_up_to_temporal_size, x_after_temporal_size), dim=2)
+
+        # x = torch.cat((x_s, x_t), dim=-1)
         # (b, num_heads, num_frames_out, num_joints, hidden_features_s), (b, num_heads, num_frames_out, num_joints, hidden_features_t) --> (b, num_heads, num_frames_out, num_joints, hidden_features)
 
         x = x.permute(0, 2, 3, 1, 4)

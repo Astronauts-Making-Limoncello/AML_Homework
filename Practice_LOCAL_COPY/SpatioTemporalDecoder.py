@@ -22,10 +22,12 @@ class SpatioTemporalDecoder(nn.Module):
     ):
         super().__init__()
 
+        self.hidden_features = hidden_features
+        self.num_frames_out = num_frames_out
         self.num_joints = num_joints
 
-        self.decoder_input_fc_in  = nn.Linear(decoder_input_in_features, hidden_features)
-        self.encoder_output_fc_in = nn.Linear(encoder_output_in_features, hidden_features)
+        self.decoder_input_fc_in  = nn.Linear(decoder_input_in_features, self.hidden_features)
+        self.encoder_output_fc_in = nn.Linear(encoder_output_in_features, self.hidden_features)
 
         self.decoder_blocks = nn.Sequential()
         for decoder_block_id in range(num_decoder_blocks):
@@ -59,6 +61,18 @@ class SpatioTemporalDecoder(nn.Module):
 
         decoder_input  = self.decoder_input_fc_in(decoder_input)
         encoder_output = self.encoder_output_fc_in(encoder_output)
+
+        if (decoder_input.shape[1] != self.num_frames_out):
+
+            batch_size, temporal_size, _, _ = decoder_input.shape
+
+            temporal_padding = torch.zeros(
+                (batch_size, self.num_frames_out-temporal_size, self.num_joints, self.hidden_features)
+            ).to(decoder_input.device)
+            # print(f"temporal_padding.shape: {temporal_padding.shape}")
+
+            decoder_input = torch.cat((decoder_input, temporal_padding), dim=1)
+            # print(f"decoder_input.shape: {decoder_input.shape}")
 
         for decoder_block in self.decoder_blocks:
             x = decoder_block.forward(
