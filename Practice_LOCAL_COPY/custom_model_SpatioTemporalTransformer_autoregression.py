@@ -144,7 +144,7 @@ if autoregression:
 
 use_skip_connection_encoder = False
 num_heads_encoder = 1
-num_encoder_blocks = 2
+num_encoder_blocks = 1
 
 st_encoder = SpatioTemporalEncoder(
     in_features_encoder, hidden_features, out_features_encoder, num_joints,
@@ -158,7 +158,7 @@ encoder_mask_t = None
 
 use_skip_connection_decoder = False
 num_heads_decoder = 1
-num_decoder_blocks = 2
+num_decoder_blocks = 1
 
 st_decoder = SpatioTemporalDecoder(
     decoder_input_in_features=in_features_decoder, 
@@ -193,7 +193,7 @@ print(f"Number of trainable parameters: [b][#6495ED]{sum(p.numel() for p in mode
 
 ### --- OPTIMIZER --- ###
 
-lr=8e-3 
+lr=1e-3 
 weight_decay=1e-5 
 amsgrad=True
 momentum=0.3
