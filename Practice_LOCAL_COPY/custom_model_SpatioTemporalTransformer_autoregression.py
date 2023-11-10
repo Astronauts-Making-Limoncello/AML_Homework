@@ -56,7 +56,7 @@ vald_dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=1, actio
 batch_size = 256
 batch_size_val = batch_size
 batch_size_test = batch_size
-lim_n_batches_percent = 0.50
+lim_n_batches_percent = 0.1
 
 data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)#
 vald_loader = DataLoader(vald_dataset, batch_size=batch_size_val, shuffle=True, num_workers=0, pin_memory=True)
@@ -332,6 +332,10 @@ progress_bar = Progress(
 
 progress_bar.start()
 
+def eval_step(batch):
+  pass
+
+
 def train(data_loader,vald_loader, path_to_save_model=None):
 
   n_train_batches = int(len(data_loader) * lim_n_batches_percent) + 1 
@@ -365,126 +369,122 @@ def train(data_loader,vald_loader, path_to_save_model=None):
       n=0
       model.train()
       for cnt,batch in list(enumerate(data_loader))[:n_train_batches]:
-          batch_size_current_batch = batch.shape[0]
-          batch=batch.float().to(device)
-          batch_dim=batch.shape[0]
-          n+=batch_dim
+        batch_size_current_batch = batch.shape[0]
+        batch=batch.float().to(device)
+        batch_dim=batch.shape[0]
+        n+=batch_dim
 
-          # NOTE: encoders based on their code require the permute
-          # sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3).permute(0,3,1,2)
-          # NOTE: encoders based on our code do NOT require the permute
-          sequences_train = batch[:, 0:input_n, dim_used].view(-1, input_n, num_joints, 3)
-          # print(f"\[main.train] sequences_train.shape: {sequences_train.shape}")
-          # sequences_train.shape: batch_size, input_n, num_joints, in_features
+        # NOTE: encoders based on their code require the permute
+        # sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3).permute(0,3,1,2)
+        # NOTE: encoders based on our code do NOT require the permute
+        sequences_train = batch[:, 0:input_n, dim_used].view(-1, input_n, num_joints, 3)
+        # print(f"\[main.train] sequences_train.shape: {sequences_train.shape}")
+        # sequences_train.shape: batch_size, input_n, num_joints, in_features
 
-          sequences_gt=batch[:, input_n:input_n+output_n, dim_used].view(-1,output_n,len(dim_used)//3,3)
-          # print(f"\[main.train] sequences_gt.shape: {sequences_gt.shape}")
+        sequences_gt=batch[:, input_n:input_n+output_n, dim_used].view(-1,output_n,len(dim_used)//3,3)
+        # print(f"\[main.train] sequences_gt.shape: {sequences_gt.shape}")
 
-          if autoregression:
+        if autoregression:
 
-            # working on a copy of sequences_gt so as we keep the original untoched for the loss computation
-            # and to keep compatibility for when autoregression=False
-            sequences_gt_autoregression = batch[:, input_n:input_n+output_n, dim_used].view(-1,output_n,len(dim_used)//3,3)
+          # working on a copy of sequences_gt so as we keep the original untoched for the loss computation
+          # and to keep compatibility for when autoregression=False
+          sequences_gt_autoregression = batch[:, input_n:input_n+output_n, dim_used].view(-1,output_n,len(dim_used)//3,3)
 
-            # adding num_special_tokens extra features
-            # to accomodate encoding of special tokens (start of sequence, end of sequence)
-            in_features_pad_tgt = torch.zeros(
-              batch_size_current_batch, output_n, num_joints, num_special_tokens_decoder
-            ).to(device)
-            sequences_gt_autoregression = torch.cat((sequences_gt_autoregression, in_features_pad_tgt), dim=-1)
+          # adding num_special_tokens extra features
+          # to accomodate encoding of special tokens (start of sequence, end of sequence)
+          in_features_pad_tgt = torch.zeros(
+            batch_size_current_batch, output_n, num_joints, num_special_tokens_decoder
+          ).to(device)
+          sequences_gt_autoregression = torch.cat((sequences_gt_autoregression, in_features_pad_tgt), dim=-1)
+          # print(f"sequences_gt_autoregression.shape: {sequences_gt_autoregression.shape}")
+
+          if use_start_of_sequence_token_in_decoder:
+            
+            # removing last element of gt sequence, in order to shift gt sequence to right by one position
+            # by means of adding the start of sequence token
+            sequences_gt_autoregression = sequences_gt_autoregression[:, :-1, :, :]
             # print(f"sequences_gt_autoregression.shape: {sequences_gt_autoregression.shape}")
 
-            if use_start_of_sequence_token_in_decoder:
-              
-              # removing last element of gt sequence, in order to shift gt sequence to right by one position
-              # by means of adding the start of sequence token
-              sequences_gt_autoregression = sequences_gt_autoregression[:, :-1, :, :]
-              # print(f"sequences_gt_autoregression.shape: {sequences_gt_autoregression.shape}")
+            # creating the start of sequence token
+            # see autoregression section comments of report for full detail on shapes, etc.
+            start_of_sequence_token_decoder = torch.zeros(
+              (batch_size_current_batch, 1, num_joints, in_features_decoder)
+            ).to(device)
+            # print(f"start_of_sequence_token_decoder.shape: {start_of_sequence_token_decoder.shape}")
+            
+            # concatenating sequences_gt_autoregression to start_of_sequence_token along the temporal dimension
+            # effectively shifts the output by 1 position, by means of adding the
+            # start of sequence token
+            sequences_gt_autoregression = torch.cat(
+              tensors=(start_of_sequence_token_decoder, sequences_gt_autoregression),
+              dim=1 
+            )
+            # print(f"sequences_gt_autoregression.shape: {sequences_gt_autoregression.shape}")
 
-              # creating the start of sequence token
-              # see autoregression section comments of report for full detail on shapes, etc.
-              start_of_sequence_token_decoder = torch.zeros(
-                (batch_size_current_batch, 1, num_joints, in_features_decoder)
-              ).to(device)
-              # print(f"start_of_sequence_token_decoder.shape: {start_of_sequence_token_decoder.shape}")
-              
-              # concatenating sequences_gt_autoregression to start_of_sequence_token along the temporal dimension
-              # effectively shifts the output by 1 position, by means of adding the
-              # start of sequence token
-              sequences_gt_autoregression = torch.cat(
-                tensors=(start_of_sequence_token_decoder, sequences_gt_autoregression),
-                dim=1 
-              )
-              # print(f"sequences_gt_autoregression.shape: {sequences_gt_autoregression.shape}")
+            # feature vector of special token (which is concatenated to feature vector of data!)
+            # is a one-hot encoding vector, where each special token type has its own dimension set to 1
+            # so, setting to 1 the dimension of the start_of_sequence special token to 1
+            sequences_gt_autoregression[:, 0, :, in_features+start_of_sequence_token_offset] = 1.
 
-              # feature vector of special token (which is concatenated to feature vector of data!)
-              # is a one-hot encoding vector, where each special token type has its own dimension set to 1
-              # so, setting to 1 the dimension of the start_of_sequence special token to 1
-              sequences_gt_autoregression[:, 0, :, in_features+start_of_sequence_token_offset] = 1.
+        optimizer.zero_grad()
 
-          optimizer.zero_grad()
+        decoder_mask_s = causal_mask((batch_size_current_batch, num_heads_decoder, num_frames_out, num_joints, num_joints)).to(device)
+        decoder_mask_t = causal_mask((batch_size_current_batch, num_heads_decoder, num_joints, num_frames_out, num_frames)).to(device)
 
-          decoder_mask_s = causal_mask((batch_size_current_batch, num_heads_decoder, num_frames_out, num_joints, num_joints)).to(device)
-          decoder_mask_t = causal_mask((batch_size_current_batch, num_heads_decoder, num_joints, num_frames_out, num_frames)).to(device)
+        sequences_predict=model(
+          src=sequences_train, 
+          tgt=sequences_gt_autoregression if autoregression else sequences_gt, 
+          src_mask_s=encoder_mask_s, src_mask_t=encoder_mask_t,
+          tgt_mask_s=decoder_mask_s, tgt_mask_t=decoder_mask_t
+        )
+        # print(f"\[main.train] sequences_predict.shape: {sequences_predict.shape}")
 
-          sequences_predict=model(
-            src=sequences_train, 
-            tgt=sequences_gt_autoregression if autoregression else sequences_gt, 
-            src_mask_s=encoder_mask_s, src_mask_t=encoder_mask_t,
-            tgt_mask_s=decoder_mask_s, tgt_mask_t=decoder_mask_t
-          )
+        if autoregression:
+          # special token num_special_token_{encoder,decoder}-long vectors 
+          # get appended to the end of the in_feature-long feature vector
+          # so, using slicing, we can separate feature vector from special token encoding vectors
+            
+          sequences_predict_special_tokens =           sequences_predict[:, :, :, in_features:]
+          sequences_gt_special_tokens      = sequences_gt_autoregression[:, :, :, in_features:]
+          # print(f"\[main.train] sequences_predict_special_tokens.shape: {sequences_predict_special_tokens.shape}")
+          # print(f"\[main.train] sequences_gt_special_tokens.shape     : {sequences_gt_special_tokens.shape}")
+          
+          sequences_predict = sequences_predict[:, :, :, :in_features]
           # print(f"\[main.train] sequences_predict.shape: {sequences_predict.shape}")
 
-          if autoregression:
-            # special token num_special_token_{encoder,decoder}-long vectors 
-            # get appended to the end of the in_feature-long feature vector
-            # so, using slicing, we can separate feature vector from special token encoding vectors
-             
-            sequences_predict_special_tokens =           sequences_predict[:, :, :, in_features:]
-            sequences_gt_special_tokens      = sequences_gt_autoregression[:, :, :, in_features:]
-            # print(f"\[main.train] sequences_predict_special_tokens.shape: {sequences_predict_special_tokens.shape}")
-            # print(f"\[main.train] sequences_gt_special_tokens.shape     : {sequences_gt_special_tokens.shape}")
-            
-            sequences_predict = sequences_predict[:, :, :, :in_features]
-            # print(f"\[main.train] sequences_predict.shape: {sequences_predict.shape}")
-
-            # computing l_2 loss between features of special tokens
-            # it will be used as second term of the training loss
-            loss_2 = l2_error(
-              sequences_predict_special_tokens, sequences_gt_special_tokens, 
-              num_special_tokens_decoder
-            )
+          # computing l_2 loss between features of special tokens
+          # it will be used as second term of the training loss
+          loss_2 = l2_error(
+            sequences_predict_special_tokens, sequences_gt_special_tokens, 
+            num_special_tokens_decoder
+          )
 
 
-          loss = mpjpe_error(sequences_predict,sequences_gt)
-          
-          if autoregression:
-            loss += loss_2
+        loss = mpjpe_error(sequences_predict,sequences_gt)
 
+        if autoregression:
+          loss += loss_2
 
-        #   if cnt % log_step == 0:
-        #     print('[Epoch: %d, Iteration: %5d]  training loss: %.3f' %(epoch + 1, cnt + 1, loss.item()))
+        loss.backward()
+        if clip_grad is not None:
+          torch.nn.utils.clip_grad_norm_(model.parameters(),clip_grad)
 
-          loss.backward()
-          if clip_grad is not None:
-            torch.nn.utils.clip_grad_norm_(model.parameters(),clip_grad)
+        optimizer.step()
+        running_loss += loss*batch_dim
 
-          optimizer.step()
-          running_loss += loss*batch_dim
+        if running_loss/n < train_loss_best:
+          train_loss_best = running_loss/n
 
-          if running_loss/n < train_loss_best:
-            train_loss_best = running_loss/n
+          torch.save({
+            'epoch': epoch + 1,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'train_loss': train_loss,
+            'val_loss': val_loss
+            }, f"{ckpt_dir}/{model_name}_best_train_loss.pt")
 
-            torch.save({
-              'epoch': epoch + 1,
-              'model_state_dict': model.state_dict(),
-              'optimizer_state_dict': optimizer.state_dict(),
-              'train_loss': train_loss,
-              'val_loss': val_loss
-              }, f"{ckpt_dir}/{model_name}_best_train_loss.pt")
-
-          progress_bar.update(task_id=train_task, advance=1)
-          progress_bar.update(task_id=epoch_task, advance=1/(n_train_batches + n_val_batches))
+        progress_bar.update(task_id=train_task, advance=1)
+        progress_bar.update(task_id=epoch_task, advance=1/(n_train_batches + n_val_batches))
 
 
       train_loss.append(running_loss.detach().cpu()/n)
@@ -495,110 +495,108 @@ def train(data_loader,vald_loader, path_to_save_model=None):
           running_loss=0
           n=0
           for cnt,batch in list(enumerate(vald_loader))[:n_val_batches]:
-              batch_size_current_batch = batch.shape[0]
-              batch=batch.float().to(device)
-              batch_dim=batch.shape[0]
-              n+=batch_dim
+            batch_size_current_batch = batch.shape[0]
+            batch=batch.float().to(device)
+            batch_dim=batch.shape[0]
+            n+=batch_dim
 
-              # TODO encoders based on their code require the permute
-              # sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3).permute(0,3,1,2)
-              # TODO encoders based on our code do NOT require the permute
-              sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3)
-              sequences_gt=batch[:, input_n:input_n+output_n, dim_used].view(-1,output_n,len(dim_used)//3,3)
+            # TODO encoders based on their code require the permute
+            # sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3).permute(0,3,1,2)
+            # TODO encoders based on our code do NOT require the permute
+            sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3)
+            sequences_gt=batch[:, input_n:input_n+output_n, dim_used].view(-1,output_n,len(dim_used)//3,3)
 
-              if autoregression:
-                start_of_sequence_token_decoder = torch.zeros(
-                  (batch_size_current_batch, 1, num_joints, in_features_decoder)
+            if autoregression:
+              start_of_sequence_token_decoder = torch.zeros(
+                (batch_size_current_batch, 1, num_joints, in_features_decoder)
+              ).to(device)
+              # print(f"start_of_sequence_token_decoder.shape: {start_of_sequence_token_decoder.shape}")
+              
+              # setting the decoder output to the start of sequence token
+              tgt = start_of_sequence_token_decoder
+
+              for frame_out in range(num_frames_out):
+                # print(f"\n --- frame_out {frame_out} ---\n")
+                # decoder_mask_s_autoregression = causal_mask((1, 1, 1, num_joints, num_joints)).to(device)
+                decoder_mask_s_autoregression = causal_mask((batch_size_current_batch, num_heads_decoder, num_frames_out, num_joints, num_joints)).to(device)
+                # decoder_mask_t_autoregression = causal_mask((1, 1, 1, frame_out+1, num_frames)).to(device)
+
+                # decoder_mask_t_autoregression = causal_mask((1, 1, 1, num_frames_out, num_frames)).to(device)
+                decoder_mask_t_autoregression = causal_mask((batch_size_current_batch, num_heads_decoder, num_joints, num_frames_out, num_frames)).to(device)
+
+                # print(f"tgt.shape           : {tgt.shape}")
+                # print(f"decoder_mask_t_autoregression.shape: {decoder_mask_t_autoregression.shape}")
+                
+                decoder_output = model(
+                  src=sequences_train, tgt=tgt, 
+                  tgt_mask_s=decoder_mask_s_autoregression, tgt_mask_t=decoder_mask_t_autoregression
+                )
+
+                # print(f"decoder_output.shape             : {decoder_output.shape}")
+                # print(f"tgt.shape                        : {tgt.shape}")
+
+                tgt = torch.cat((tgt, decoder_output[:, -1:, :, :]), dim=1)
+                # print(f"tgt.shape                        : {tgt.shape}")
+
+                # working on a copy of sequences_gt so as we keep the original untoched for the loss computation
+                # and to keep compatibility for when autoregression=False
+                sequences_gt_autoregression = batch[:, input_n:input_n+output_n, dim_used].view(-1,output_n,len(dim_used)//3,3)
+
+                # adding num_special_tokens extra features
+                # to accomodate encoding of special tokens (start of sequence, end of sequence)
+                in_features_pad_tgt = torch.zeros(
+                  batch_size_current_batch, output_n, num_joints, num_special_tokens_decoder
                 ).to(device)
-                # print(f"start_of_sequence_token_decoder.shape: {start_of_sequence_token_decoder.shape}")
-                
-                # setting the decoder output to the start of sequence token
-                tgt = start_of_sequence_token_decoder
+                sequences_gt_autoregression = torch.cat((sequences_gt_autoregression, in_features_pad_tgt), dim=-1)
+                # print(f"sequences_gt_autoregression.shape: {sequences_gt_autoregression.shape}")
 
-                for frame_out in range(num_frames_out):
-                  # print(f"\n --- frame_out {frame_out} ---\n")
-                  # decoder_mask_s_autoregression = causal_mask((1, 1, 1, num_joints, num_joints)).to(device)
-                  decoder_mask_s_autoregression = causal_mask((batch_size_current_batch, num_heads_decoder, num_frames_out, num_joints, num_joints)).to(device)
-                  # decoder_mask_t_autoregression = causal_mask((1, 1, 1, frame_out+1, num_frames)).to(device)
+              # removing start of sequence special token from the autoregressive predictions
+              sequences_predict = tgt[:, 1:, :, :]
+              # print(f"sequences_predict.shape: {sequences_predict.shape}")
 
-                  # decoder_mask_t_autoregression = causal_mask((1, 1, 1, num_frames_out, num_frames)).to(device)
-                  decoder_mask_t_autoregression = causal_mask((batch_size_current_batch, num_heads_decoder, num_joints, num_frames_out, num_frames)).to(device)
+              sequences_predict_special_tokens =           sequences_predict[:, :, :, in_features:]
+              sequences_gt_special_tokens      = sequences_gt_autoregression[:, :, :, in_features:]
+              # print(f"\[main.train] sequences_predict_special_tokens.shape: {sequences_predict_special_tokens.shape}")
+              # print(f"\[main.train] sequences_gt_special_tokens.shape     : {sequences_gt_special_tokens.shape}")
+          
+              sequences_predict = sequences_predict[:, :, :, :in_features]
+              # print(f"\[main.train] sequences_predict.shape: {sequences_predict.shape}")
 
-                  # print(f"tgt.shape           : {tgt.shape}")
-                  # print(f"decoder_mask_t_autoregression.shape: {decoder_mask_t_autoregression.shape}")
-                  
-                  decoder_output = model(
-                    src=sequences_train, tgt=tgt, 
-                    tgt_mask_s=decoder_mask_s_autoregression, tgt_mask_t=decoder_mask_t_autoregression
-                  )
+              # computing l_2 loss between features of special tokens
+              # it will be used as second term of the training loss
+              loss_2 = l2_error(
+                sequences_predict_special_tokens, sequences_gt_special_tokens, 
+                num_special_tokens_decoder
+              )
 
-                  # print(f"decoder_output.shape             : {decoder_output.shape}")
-                  # print(f"tgt.shape                        : {tgt.shape}")
 
-                  tgt = torch.cat((tgt, decoder_output[:, -1:, :, :]), dim=1)
-                  # print(f"tgt.shape                        : {tgt.shape}")
+              loss = mpjpe_error(sequences_predict,sequences_gt)
+              
+              if autoregression:
+                loss += loss_2
 
-                  # working on a copy of sequences_gt so as we keep the original untoched for the loss computation
-                  # and to keep compatibility for when autoregression=False
-                  sequences_gt_autoregression = batch[:, input_n:input_n+output_n, dim_used].view(-1,output_n,len(dim_used)//3,3)
 
-                  # adding num_special_tokens extra features
-                  # to accomodate encoding of special tokens (start of sequence, end of sequence)
-                  in_features_pad_tgt = torch.zeros(
-                    batch_size_current_batch, output_n, num_joints, num_special_tokens_decoder
-                  ).to(device)
-                  sequences_gt_autoregression = torch.cat((sequences_gt_autoregression, in_features_pad_tgt), dim=-1)
-                  # print(f"sequences_gt_autoregression.shape: {sequences_gt_autoregression.shape}")
 
-                # removing start of sequence special token from the autoregressive predictions
-                sequences_predict = tgt[:, 1:, :, :]
-                # print(f"sequences_predict.shape: {sequences_predict.shape}")
+            else:
 
-                sequences_predict_special_tokens =           sequences_predict[:, :, :, in_features:]
-                sequences_gt_special_tokens      = sequences_gt_autoregression[:, :, :, in_features:]
-                # print(f"\[main.train] sequences_predict_special_tokens.shape: {sequences_predict_special_tokens.shape}")
-                # print(f"\[main.train] sequences_gt_special_tokens.shape     : {sequences_gt_special_tokens.shape}")
+              # sequences_predict=model(sequences_train).view(-1, output_n, joints_to_consider, 3)
+              sequences_predict=model(
+                src=sequences_train, tgt=sequences_gt,
+                tgt_mask_s=decoder_mask_s, tgt_mask_t=decoder_mask_t
+              )
+              # print(f"\[main.train] sequences_predict.shape: {sequences_predict.shape}")
+              sequences_predict=sequences_predict.view(-1, output_n, joints_to_consider, 3)
+              # print(f"\[main.train] sequences_predict.shape: {sequences_predict.shape}")
             
-                sequences_predict = sequences_predict[:, :, :, :in_features]
-                # print(f"\[main.train] sequences_predict.shape: {sequences_predict.shape}")
-
-                # computing l_2 loss between features of special tokens
-                # it will be used as second term of the training loss
-                loss_2 = l2_error(
-                  sequences_predict_special_tokens, sequences_gt_special_tokens, 
-                  num_special_tokens_decoder
-                )
-
-
-                loss = mpjpe_error(sequences_predict,sequences_gt)
-                
-                if autoregression:
-                  loss += loss_2
-
-
-
-              else:
-
-                # sequences_predict=model(sequences_train).view(-1, output_n, joints_to_consider, 3)
-                sequences_predict=model(
-                  src=sequences_train, tgt=sequences_gt,
-                  tgt_mask_s=decoder_mask_s, tgt_mask_t=decoder_mask_t
-                )
-                # print(f"\[main.train] sequences_predict.shape: {sequences_predict.shape}")
-                sequences_predict=sequences_predict.view(-1, output_n, joints_to_consider, 3)
-                # print(f"\[main.train] sequences_predict.shape: {sequences_predict.shape}")
-              
-              
-              
-              
+          
               loss=mpjpe_error(sequences_predict,sequences_gt)
 
             #   if cnt % log_step == 0:
             #             print('[Epoch: %d, Iteration: %5d]  validation loss: %.3f' %(epoch + 1, cnt + 1, loss.item()))
-              running_loss+=loss*batch_dim
+            running_loss+=loss*batch_dim
 
-              progress_bar.update(task_id=val_task, advance=1)
-              progress_bar.update(task_id=epoch_task, advance=1/(n_train_batches + n_val_batches))
+            progress_bar.update(task_id=val_task, advance=1)
+            progress_bar.update(task_id=epoch_task, advance=1/(n_train_batches + n_val_batches))
 
 
           if running_loss/n < val_loss_best:
