@@ -18,7 +18,8 @@ class SpatioTemporalDecoder(nn.Module):
         hidden_features: int, out_features: int, num_joints: int,
         num_frames: int, num_frames_out: int,
         num_heads: int, use_skip_connection: bool,
-        num_decoder_blocks: int
+        skip_connection_weight: float,
+        num_decoder_blocks: int, dropout: float
     ):
         super().__init__()
 
@@ -37,7 +38,9 @@ class SpatioTemporalDecoder(nn.Module):
                 SpatioTemporalDecoderBlock(
                     in_features=hidden_features, out_features=hidden_features, num_joints=num_joints, 
                     num_frames=num_frames, num_frames_out=num_frames_out, 
-                    num_heads=num_heads, use_skip_connection=use_skip_connection
+                    num_heads=num_heads, use_skip_connection=use_skip_connection,
+                    skip_connection_weight=skip_connection_weight, 
+                    dropout=dropout
                 )
             )
 

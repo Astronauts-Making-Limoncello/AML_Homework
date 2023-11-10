@@ -16,7 +16,8 @@ class SpatioTemporalEncoderBlock(nn.Module):
         self, 
         in_features: int, out_features: int, num_joints: int,
         num_frames: int, num_frames_out: int,
-        num_heads: int, use_skip_connection: bool
+        num_heads: int, use_skip_connection: bool,
+        dropout: float
     ):
         super().__init__()
 
@@ -30,9 +31,14 @@ class SpatioTemporalEncoderBlock(nn.Module):
             num_heads=num_heads
         )
 
+        self.dropout_1 = nn.Dropout(p=dropout)
+
         self.layer_norm_2 = nn.LayerNorm(out_features)
 
         self.mlp = MLP(out_features, out_features)
+
+        self.dropout_2 = nn.Dropout(p=dropout)
+
             
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -57,6 +63,8 @@ class SpatioTemporalEncoderBlock(nn.Module):
             mask_s=mask_s, mask_t=mask_t
         )
 
+        encoder_input = self.dropout_1(encoder_input)
+
         if self.use_skip_connection:
             encoder_input = encoder_input + enc_inp_for_skip_connection
 
@@ -65,6 +73,8 @@ class SpatioTemporalEncoderBlock(nn.Module):
         encoder_input = self.layer_norm_2(encoder_input)
 
         encoder_output = self.mlp(encoder_input)
+
+        encoder_output = self.dropout_2(encoder_output)
 
         if self.use_skip_connection:
             encoder_output = encoder_output + enc_inp_for_skip_connection

@@ -43,8 +43,8 @@ joints_to_consider=22
 
 actions_to_consider_test='all' # actions to test on.
 
-actions_to_consider_train = ["smoking"]
-# actions_to_consider_train = None
+# actions_to_consider_train = ["smoking"]
+actions_to_consider_train = None
 
 if actions_to_consider_train is not None:
   print(f"[b][#FF0000]WARNING: training only on these actions --> {actions_to_consider_train}")
@@ -53,11 +53,13 @@ if actions_to_consider_train is not None:
 dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=0, actions=actions_to_consider_train)
 vald_dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=1, actions=actions_to_consider_train)
 
-batch_size_test = batch_size = 256
-lim_n_batches_percent = 0.1
+batch_size = 256
+batch_size_val = batch_size
+batch_size_test = batch_size
+lim_n_batches_percent = 0.50
 
 data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)#
-vald_loader = DataLoader(vald_dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)
+vald_loader = DataLoader(vald_dataset, batch_size=batch_size_val, shuffle=True, num_workers=0, pin_memory=True)
 
 ### --- DATA --- ###
 
@@ -142,23 +144,27 @@ if autoregression:
   # another_token_offset = 3
   # etc.
 
-use_skip_connection_encoder = False
+use_skip_connection_encoder = True
 num_heads_encoder = 1
 num_encoder_blocks = 1
+dropout_encoder = 0.0
 
 st_encoder = SpatioTemporalEncoder(
     in_features_encoder, hidden_features, out_features_encoder, num_joints,
     num_frames, num_frames, # it's encoder, so num_frames_out == num_frames
     num_heads_encoder, use_skip_connection_encoder,
-    num_encoder_blocks
+    num_encoder_blocks, 
+    dropout_encoder
 )
 
 encoder_mask_s = None
 encoder_mask_t = None
 
 use_skip_connection_decoder = False
+skip_connection_weight_decoder = 1
 num_heads_decoder = 1
 num_decoder_blocks = 1
+dropout_decoder = 0.0
 
 st_decoder = SpatioTemporalDecoder(
     decoder_input_in_features=in_features_decoder, 
@@ -167,7 +173,8 @@ st_decoder = SpatioTemporalDecoder(
     num_joints=num_joints,
     num_frames=num_frames, num_frames_out=num_frames_out,
     num_heads=num_heads_decoder, use_skip_connection=use_skip_connection_decoder,
-    num_decoder_blocks=num_decoder_blocks
+    skip_connection_weight=skip_connection_weight_decoder,
+    num_decoder_blocks=num_decoder_blocks, dropout=dropout_decoder
 )
 
 # alternative POV (referencing this Transformer implementaiton https://github.com/hkproj/pytorch-transformer): 
@@ -193,8 +200,8 @@ print(f"Number of trainable parameters: [b][#6495ED]{sum(p.numel() for p in mode
 
 ### --- OPTIMIZER --- ###
 
-lr=1e-3 
-weight_decay=1e-5 
+lr=2e-3
+weight_decay=1e-2 
 amsgrad=True
 momentum=0.3
 nesterov=True
@@ -269,6 +276,7 @@ train_config = {
   "encoder_num_heads": num_heads_encoder,
   "decoder_num_heads": num_heads_decoder,
   "use_skip_connection_decoder": use_skip_connection_decoder,
+  "skip_connection_weight_decoder": skip_connection_weight_decoder,
   "use_skip_connection_encoder": use_skip_connection_encoder,
   "num_encoder_blocks": num_encoder_blocks,
   "num_decoder_blocks": num_decoder_blocks,
@@ -280,6 +288,7 @@ train_config = {
   "in_features_decoder": in_features_decoder,
   "out_features_encoder": out_features_encoder,
   "out_features_decoder": out_features_decoder,
+  "dropout": dropout,
   "hidden_features": hidden_features,
   "checkpoint_path": resume_from_ckpt,
   "checkpoint_epoch": ckpt["epoch"] if resume_from_ckpt is not None else -69,
@@ -413,6 +422,10 @@ def train(data_loader,vald_loader, path_to_save_model=None):
               sequences_gt_autoregression[:, 0, :, in_features+start_of_sequence_token_offset] = 1.
 
           optimizer.zero_grad()
+
+          decoder_mask_s = causal_mask((batch_size_current_batch, num_heads_decoder, num_frames_out, num_joints, num_joints)).to(device)
+          decoder_mask_t = causal_mask((batch_size_current_batch, num_heads_decoder, num_joints, num_frames_out, num_frames)).to(device)
+
           sequences_predict=model(
             src=sequences_train, 
             tgt=sequences_gt_autoregression if autoregression else sequences_gt, 
@@ -503,10 +516,12 @@ def train(data_loader,vald_loader, path_to_save_model=None):
 
                 for frame_out in range(num_frames_out):
                   # print(f"\n --- frame_out {frame_out} ---\n")
-                  decoder_mask_s_autoregression = causal_mask((1, 1, 1, num_joints, num_joints)).to(device)
+                  # decoder_mask_s_autoregression = causal_mask((1, 1, 1, num_joints, num_joints)).to(device)
+                  decoder_mask_s_autoregression = causal_mask((batch_size_current_batch, num_heads_decoder, num_frames_out, num_joints, num_joints)).to(device)
                   # decoder_mask_t_autoregression = causal_mask((1, 1, 1, frame_out+1, num_frames)).to(device)
 
-                  decoder_mask_t_autoregression = causal_mask((1, 1, 1, num_frames_out, num_frames)).to(device)
+                  # decoder_mask_t_autoregression = causal_mask((1, 1, 1, num_frames_out, num_frames)).to(device)
+                  decoder_mask_t_autoregression = causal_mask((batch_size_current_batch, num_heads_decoder, num_joints, num_frames_out, num_frames)).to(device)
 
                   # print(f"tgt.shape           : {tgt.shape}")
                   # print(f"decoder_mask_t_autoregression.shape: {decoder_mask_t_autoregression.shape}")
@@ -716,10 +731,12 @@ def test(ckpt_path, final_epoch_print):
 
             for frame_out in range(num_frames_out):
               # print(f"\n --- frame_out {frame_out} ---\n")
-              decoder_mask_s_autoregression = causal_mask((1, 1, 1, num_joints, num_joints)).to(device)
+              # decoder_mask_s_autoregression = causal_mask((1, 1, 1, num_joints, num_joints)).to(device)
+              decoder_mask_s_autoregression = causal_mask((batch_size_current_batch, num_heads_decoder, num_frames_out, num_joints, num_joints)).to(device)
               # decoder_mask_t_autoregression = causal_mask((1, 1, 1, frame_out+1, num_frames)).to(device)
 
-              decoder_mask_t_autoregression = causal_mask((1, 1, 1, num_frames_out, num_frames)).to(device)
+              # decoder_mask_t_autoregression = causal_mask((1, 1, 1, num_frames_out, num_frames)).to(device)
+              decoder_mask_t_autoregression = causal_mask((batch_size_current_batch, num_heads_decoder, num_joints, num_frames_out, num_frames)).to(device)
 
               # print(f"tgt.shape           : {tgt.shape}")
               # print(f"decoder_mask_t_autoregression.shape: {decoder_mask_t_autoregression.shape}")
@@ -821,6 +838,7 @@ def test(ckpt_path, final_epoch_print):
     
 
     action_loss_dict["loss/test"] = np.round((accum_loss/n_batches).item(),1)
+    action_loss_dict["best_loss/test"] = np.round((accum_loss/n_batches).item(),1)
     wandb.log(action_loss_dict)
 
 # ckpt_path = './checkpoints/h36m_3d_25frames_ckpt_epoch_0.pt' # Change the epoch according to the validation curve

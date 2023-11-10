@@ -18,7 +18,8 @@ class SpatioTemporalEncoder(nn.Module):
         in_features: int, hidden_features: int, out_features: int, num_joints: int,
         num_frames: int, num_frames_out: int,
         num_heads: int, use_skip_connection: bool,
-        num_encoder_blocks: int
+        num_encoder_blocks: int,
+        dropout: float
     ):
         super().__init__()
 
@@ -32,7 +33,8 @@ class SpatioTemporalEncoder(nn.Module):
                 SpatioTemporalEncoderBlock(
                     in_features=hidden_features, out_features=hidden_features, num_joints=num_joints, 
                     num_frames=num_frames, num_frames_out=num_frames_out, 
-                    num_heads=num_heads, use_skip_connection=use_skip_connection
+                    num_heads=num_heads, use_skip_connection=use_skip_connection,
+                    dropout=dropout
                 )
             )
 

@@ -82,6 +82,8 @@ def main():
     # model
     num_heads = 8
     use_skip_connection = True
+    skip_connection_weight = 1.
+    dropout = 0.1
 
     num_encoder_blocks = 3
 
@@ -89,7 +91,8 @@ def main():
         in_features_encoder, hidden_features, out_features_encoder, num_joints,
         num_frames, num_frames, # it's encoder, so num_frames_out == num_frames
         num_heads, use_skip_connection,
-        num_encoder_blocks
+        num_encoder_blocks,
+        dropout=dropout
     )
 
     encoder_mask_s = None
@@ -98,22 +101,28 @@ def main():
     num_decoder_blocks = 3
 
     st_decoder = SpatioTemporalDecoder(
-        in_features_decoder, hidden_features, out_features_decoder, num_joints,
-        num_frames, num_frames_out,
-        num_heads, use_skip_connection,
-        num_decoder_blocks
+        decoder_input_in_features=in_features_decoder, 
+        encoder_output_in_features=out_features_encoder,
+        hidden_features=hidden_features,
+        out_features=out_features_decoder, num_joints=num_joints, 
+        num_frames=num_frames, num_frames_out=num_frames_out, 
+        num_heads=num_heads, use_skip_connection=use_skip_connection, skip_connection_weight=skip_connection_weight,
+        num_decoder_blocks=num_decoder_blocks,
+        dropout=dropout
     )
 
     # alternative POV (referencing this Transformer implementaiton https://github.com/hkproj/pytorch-transformer): 
     # seq_len is num_frames_out in decoder, so gotta use num_frames_out
     # first three dimensions set to 1 are for: batch, heads and time
     decoder_mask_s = causal_mask((1, 1, 1, num_joints, num_joints)).to(device)
+    # decoder_mask_s = causal_mask((batch_size, num_heads, num_frames_out, num_joints, num_joints)).to(device)
 
     # since we are in the decoder, mask must have same shape of attn_t
     # REMEMBER, NO temporal explosion applied to {q,k,v}_t, because multi-dimensional mat muls to produce attn_t do NOT require it
     # so, we have to mask a (num_frames_out, num_frames) dimensional matrix  
-    # first three dimensions set to 1 are for: batch, heads and time
+    # first three dimensions set to 1 are for: batch, heads and space
     decoder_mask_t = causal_mask((1, 1, 1, num_frames_out, num_frames)).to(device)
+    # decoder_mask_t = causal_mask((batch_size, num_heads, num_joints, num_frames_out, num_frames)).to(device)
 
     st_transformer = SpatioTemporalTransformer(
         st_encoder=st_encoder, st_decoder=st_decoder,

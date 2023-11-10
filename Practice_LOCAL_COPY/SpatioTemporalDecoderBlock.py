@@ -16,13 +16,16 @@ class SpatioTemporalDecoderBlock(nn.Module):
         self, 
         in_features: int, out_features: int, num_joints: int,
         num_frames: int, num_frames_out: int,
-        num_heads: int, use_skip_connection: bool
+        num_heads: int, use_skip_connection: bool,
+        skip_connection_weight: float, 
+        dropout: float
     ):
         super().__init__()
 
         self.num_frames_out = num_frames_out
 
         self.use_skip_connection = use_skip_connection
+        self.skip_connection_weight = skip_connection_weight
 
         self.layer_norm_1 = nn.LayerNorm(in_features)
 
@@ -32,9 +35,13 @@ class SpatioTemporalDecoderBlock(nn.Module):
             num_heads=num_heads
         )
 
+        self.dropout_1 = nn.Dropout(p=dropout)
+
         self.layer_norm_2 = nn.LayerNorm(out_features)
 
         self.mlp = MLP(out_features, out_features)
+
+        self.dropout_2 = nn.Dropout(p=dropout)
             
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -51,7 +58,7 @@ class SpatioTemporalDecoderBlock(nn.Module):
         #  decoder_input.shape: batch_size, temporal_dim, spatial_dim, feature_dim
         # encoder_output.shape: batch_size, temporal_dim, spatial_dim, feature_dim
         
-        dec_inp_for_skip_connection = decoder_input
+        dec_inp_for_skip_connection = decoder_input * self.skip_connection_weight
 
         decoder_input = self.layer_norm_1(decoder_input)
 
@@ -60,14 +67,18 @@ class SpatioTemporalDecoderBlock(nn.Module):
             mask_s=mask_s, mask_t=mask_t
         )
 
+        decoder_input = self.dropout_1(decoder_input)
+
         if self.use_skip_connection:
             decoder_input = decoder_input + dec_inp_for_skip_connection
 
-        dec_inp_for_skip_connection = decoder_input
+        dec_inp_for_skip_connection = decoder_input * self.skip_connection_weight
 
         decoder_input = self.layer_norm_2(decoder_input)
 
         decoder_input = self.mlp(decoder_input)
+
+        decoder_input = self.dropout_2(decoder_input)
 
         if self.use_skip_connection:
             decoder_input = decoder_input + dec_inp_for_skip_connection
