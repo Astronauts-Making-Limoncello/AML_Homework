@@ -105,7 +105,7 @@ optimizer=optim.Adam(model.parameters(),lr=conf.lr,weight_decay=conf.weight_deca
 ### --- LR SCHEDULER --- ###
 
 if conf.use_scheduler:
-  scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=gamma, verbose=True)
+  scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=conf.milestones, gamma=conf.gamma, verbose=True)
   # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma, verbose=True)
 
 ### --- LR SCHEDULER --- ###
@@ -433,7 +433,7 @@ def train(data_loader,vald_loader, path_to_save_model=None):
       if conf.use_scheduler:
         scheduler.step()
 
-      if save_and_plot and epoch%conf.log_epoch==0:
+      if conf.save_and_plot and epoch%conf.log_epoch==0:
           torch.save(
             {
               'epoch': epoch + 1,
@@ -469,7 +469,7 @@ def train(data_loader,vald_loader, path_to_save_model=None):
 
   return final_epoch_print
 
-final_epoch_print = train(data_loader,vald_loader, path_to_save_model=model_path)
+final_epoch_print = train(data_loader,vald_loader, path_to_save_model=conf.model_path)
 
 def test(ckpt_path, final_epoch_print):
 
