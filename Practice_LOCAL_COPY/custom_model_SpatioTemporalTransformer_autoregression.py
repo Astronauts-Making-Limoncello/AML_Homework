@@ -185,7 +185,7 @@ def train(data_loader,vald_loader, path_to_save_model=None):
       n=0
       
       model.train()
-      
+
       for cnt,batch in list(enumerate(data_loader))[:n_train_batches]:
       
         batch_size_current_batch = batch.shape[0]
@@ -207,7 +207,7 @@ def train(data_loader,vald_loader, path_to_save_model=None):
         ].view(-1,conf.output_n,len(conf.dim_used)//3,3)
 
         # working on a copy of sequences_gt so as we keep the original untoched for the loss computation
-        sequences_gt_autoregression = batch[
+        sequences_gt_autoreg = batch[
           :, conf.input_n:conf.input_n+conf.output_n, conf.dim_used
         ].view(-1,conf.output_n,len(conf.dim_used)//3,3)
 
@@ -216,32 +216,32 @@ def train(data_loader,vald_loader, path_to_save_model=None):
         in_features_pad_tgt = torch.zeros(
           batch_size_current_batch, conf.output_n, conf.num_joints, conf.num_special_tokens_decoder
         ).to(device)
-        sequences_gt_autoregression = torch.cat((sequences_gt_autoregression, in_features_pad_tgt), dim=-1)
+        sequences_gt_autoreg = torch.cat((sequences_gt_autoreg, in_features_pad_tgt), dim=-1)
 
         # removing last element of gt sequence, in order to shift gt sequence to right by one position
         # by means of adding the start of sequence token
-        sequences_gt_autoregression = sequences_gt_autoregression[:, :-1, :, :]
-        # print(f"sequences_gt_autoregression.shape: {sequences_gt_autoregression.shape}")
+        sequences_gt_autoreg = sequences_gt_autoreg[:, :-1, :, :]
+        # print(f"sequences_gt_autoreg.shape: {sequences_gt_autoreg.shape}")
 
         # creating the start of sequence token
-        # see autoregression section comments of report for full detail on shapes, etc.
+        # see autoreg section comments of report for full detail on shapes, etc.
         start_of_sequence_token_decoder = torch.zeros(
           (batch_size_current_batch, 1, conf.num_joints, conf.in_features_decoder)
         ).to(device)
         # print(f"start_of_sequence_token_decoder.shape: {start_of_sequence_token_decoder.shape}")
             
-        # concatenating sequences_gt_autoregression to start_of_sequence_token along the temporal dimension
+        # concatenating sequences_gt_autoreg to start_of_sequence_token along the temporal dimension
         # effectively shifts the output by 1 position, by means of adding the
         # start of sequence token
-        sequences_gt_autoregression = torch.cat(
-          tensors=(start_of_sequence_token_decoder, sequences_gt_autoregression),
+        sequences_gt_autoreg = torch.cat(
+          tensors=(start_of_sequence_token_decoder, sequences_gt_autoreg),
           dim=1 
         )
 
         # feature vector of special token (which is concatenated to feature vector of data!)
         # is a one-hot encoding vector, where each special token type has its own dimension set to 1
         # so, setting to 1 the dimension of the start_of_sequence special token to 1
-        sequences_gt_autoregression[:, 0, :, conf.in_features + conf.start_of_sequence_token_offset] = 1.
+        sequences_gt_autoreg[:, 0, :, conf.in_features + conf.start_of_sequence_token_offset] = 1.
 
         optimizer.zero_grad()
 
@@ -261,7 +261,7 @@ def train(data_loader,vald_loader, path_to_save_model=None):
 
         sequences_predict=model(
           src=sequences_train, 
-          tgt=sequences_gt_autoregression, 
+          tgt=sequences_gt_autoreg, 
           src_mask_s=conf.encoder_mask_s, src_mask_t=conf.encoder_mask_t,
           tgt_mask_s_self_attn=decoder_mask_s_self_attn, tgt_mask_s_cross_attn=decoder_mask_s_cross_attn, 
           tgt_mask_t_self_attn=decoder_mask_t_self_attention, tgt_mask_t_cross_attn=decoder_mask_t_cross_attention
@@ -272,7 +272,7 @@ def train(data_loader,vald_loader, path_to_save_model=None):
         # so, using slicing, we can separate feature vector from special token encoding vectors
           
         sequences_predict_special_tokens =           sequences_predict[:, :, :, conf.in_features:]
-        sequences_gt_special_tokens      = sequences_gt_autoregression[:, :, :, conf.in_features:]
+        sequences_gt_special_tokens      = sequences_gt_autoreg[:, :, :, conf.in_features:]
         
         sequences_predict = sequences_predict[:, :, :, :conf.in_features]
 
@@ -350,33 +350,33 @@ def train(data_loader,vald_loader, path_to_save_model=None):
             tgt = start_of_sequence_token_decoder
 
             for frame_out in range(conf.num_frames_out):
-              decoder_mask_s_autoregression_self_attn = causal_mask(
+              decoder_mask_s_autoreg_self_attn = causal_mask(
                 (batch_size_current_batch, conf.num_heads_decoder, conf.num_frames_out, conf.num_joints, conf.num_joints)
               ).to(device)
-              decoder_mask_s_autoregression_cross_attn = causal_mask(
+              decoder_mask_s_autoreg_cross_attn = causal_mask(
                 (batch_size_current_batch, conf.num_heads_decoder, conf.num_frames_out, conf.num_joints, conf.num_joints)
               ).to(device)
 
-              decoder_mask_t_autoregression_cross_attn = causal_mask(
+              decoder_mask_t_autoreg_cross_attn = causal_mask(
                 (batch_size_current_batch, conf.num_heads_decoder, conf.num_joints, conf.num_frames_out, conf.num_frames_out)
               ).to(device)
-              decoder_mask_t_autoregression_self_attn = causal_mask(
+              decoder_mask_t_autoreg_self_attn = causal_mask(
                 (batch_size_current_batch, conf.num_heads_decoder, conf.num_joints, conf.num_frames_out, conf.num_frames_out)
               ).to(device)
 
               decoder_output = model(
                 src=sequences_train, tgt=tgt, 
-                tgt_mask_s_self_attn=decoder_mask_s_autoregression_self_attn, 
-                tgt_mask_t_self_attn=decoder_mask_t_autoregression_self_attn,
-                tgt_mask_s_cross_attn=decoder_mask_s_autoregression_cross_attn, 
-                tgt_mask_t_cross_attn=decoder_mask_t_autoregression_cross_attn
+                tgt_mask_s_self_attn=decoder_mask_s_autoreg_self_attn, 
+                tgt_mask_t_self_attn=decoder_mask_t_autoreg_self_attn,
+                tgt_mask_s_cross_attn=decoder_mask_s_autoreg_cross_attn, 
+                tgt_mask_t_cross_attn=decoder_mask_t_autoreg_cross_attn
               )
 
               tgt = torch.cat((tgt, decoder_output[:, -1:, :, :]), dim=1)
 
               # working on a copy of sequences_gt so as we keep the original untoched for the loss computation
-              # and to keep compatibility for when autoregression=False
-              sequences_gt_autoregression = batch[
+              # and to keep compatibility for when autoreg=False
+              sequences_gt_autoreg = batch[
                 :, conf.input_n:conf.input_n+conf.output_n, conf.dim_used
               ].view(-1,conf.output_n,len(conf.dim_used)//3,3)
 
@@ -385,13 +385,13 @@ def train(data_loader,vald_loader, path_to_save_model=None):
               in_features_pad_tgt = torch.zeros(
                 batch_size_current_batch, conf.output_n, conf.num_joints, conf.num_special_tokens_decoder
               ).to(device)
-              sequences_gt_autoregression = torch.cat((sequences_gt_autoregression, in_features_pad_tgt), dim=-1)
+              sequences_gt_autoreg = torch.cat((sequences_gt_autoreg, in_features_pad_tgt), dim=-1)
 
             # removing start of sequence special token from the autoregressive predictions
             sequences_predict = tgt[:, 1:, :, :]
 
             sequences_predict_special_tokens =           sequences_predict[:, :, :, conf.in_features:]
-            sequences_gt_special_tokens      = sequences_gt_autoregression[:, :, :, conf.in_features:]
+            sequences_gt_special_tokens      = sequences_gt_autoreg[:, :, :, conf.in_features:]
         
             sequences_predict = sequences_predict[:, :, :, :conf.in_features]
 
@@ -532,33 +532,33 @@ def test(ckpt_path, final_epoch_print):
           tgt = start_of_sequence_token_decoder
 
           for frame_out in range(conf.num_frames_out):
-            decoder_mask_s_autoregression_self_attn = causal_mask(
+            decoder_mask_s_autoreg_self_attn = causal_mask(
               (batch_size_current_batch, conf.num_heads_decoder, conf.num_frames_out, conf.num_joints, conf.num_joints)
             ).to(device)
-            decoder_mask_s_autoregression_cross_attn = causal_mask(
+            decoder_mask_s_autoreg_cross_attn = causal_mask(
               (batch_size_current_batch, conf.num_heads_decoder, conf.num_frames_out, conf.num_joints, conf.num_joints)
             ).to(device)
 
-            decoder_mask_t_autoregression_cross_attn = causal_mask(
+            decoder_mask_t_autoreg_cross_attn = causal_mask(
               (batch_size_current_batch, conf.num_heads_decoder, conf.num_joints, conf.num_frames_out, conf.num_frames_out)
             ).to(device)
-            decoder_mask_t_autoregression_self_attn = causal_mask(
+            decoder_mask_t_autoreg_self_attn = causal_mask(
               (batch_size_current_batch, conf.num_heads_decoder, conf.num_joints, conf.num_frames_out, conf.num_frames_out)
             ).to(device)
 
             decoder_output = model(
               src=sequences_train, tgt=tgt, 
-              tgt_mask_s_self_attn=decoder_mask_s_autoregression_self_attn, 
-              tgt_mask_t_self_attn=decoder_mask_t_autoregression_self_attn,
-              tgt_mask_s_cross_attn=decoder_mask_s_autoregression_cross_attn, 
-              tgt_mask_t_cross_attn=decoder_mask_t_autoregression_cross_attn
+              tgt_mask_s_self_attn=decoder_mask_s_autoreg_self_attn, 
+              tgt_mask_t_self_attn=decoder_mask_t_autoreg_self_attn,
+              tgt_mask_s_cross_attn=decoder_mask_s_autoreg_cross_attn, 
+              tgt_mask_t_cross_attn=decoder_mask_t_autoreg_cross_attn
             )
 
             tgt = torch.cat((tgt, decoder_output[:, -1:, :, :]), dim=1)
 
             # working on a copy of sequences_gt so as we keep the original untoched for the loss computation
-            # and to keep compatibility for when autoregression=False
-            sequences_gt_autoregression = batch[
+            # and to keep compatibility for when autoreg=False
+            sequences_gt_autoreg = batch[
               :, conf.input_n:conf.input_n+conf.output_n, conf.dim_used
             ].view(-1,conf.output_n,len(conf.dim_used)//3,3)
 
@@ -567,13 +567,13 @@ def test(ckpt_path, final_epoch_print):
             in_features_pad_tgt = torch.zeros(
               batch_size_current_batch, conf.output_n, conf.num_joints, conf.num_special_tokens_decoder
             ).to(device)
-            sequences_gt_autoregression = torch.cat((sequences_gt_autoregression, in_features_pad_tgt), dim=-1)
+            sequences_gt_autoreg = torch.cat((sequences_gt_autoreg, in_features_pad_tgt), dim=-1)
 
           # removing start of sequence special token from the autoregressive predictions
           sequences_predict = tgt[:, 1:, :, :]
 
           sequences_predict_special_tokens =           sequences_predict[:, :, :, conf.in_features:]
-          sequences_gt_special_tokens      = sequences_gt_autoregression[:, :, :, conf.in_features:]
+          sequences_gt_special_tokens      = sequences_gt_autoreg[:, :, :, conf.in_features:]
       
           sequences_predict = sequences_predict[:, :, :, :conf.in_features]
 
