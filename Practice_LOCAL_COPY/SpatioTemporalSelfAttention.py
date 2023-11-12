@@ -18,6 +18,20 @@ class SpatioTemporalSelfAttention(nn.Module):
         num_frames: int, num_frames_out: int,
         num_joints: int, num_heads: int
     ):
+        """
+        Initializes the class instance with the given parameters.
+
+        Args:
+            in_features (int): The number of input features.
+            out_features (int): The number of output features.
+            num_frames (int): The number of frames.
+            num_frames_out (int): The number of output frames.
+            num_joints (int): The number of joints.
+            num_heads (int): The number of heads.
+
+        Returns:
+            None
+        """
         super().__init__()
 
         self.in_features = in_features
@@ -42,6 +56,19 @@ class SpatioTemporalSelfAttention(nn.Module):
     def forward(
         self, q: Tensor, k: Tensor, v: Tensor, mask_s: Tensor, mask_t: Tensor,
     ):
+        """
+        Applies the forward pass of the self-attention mechanism to the input tensors q, k, and v.
+        
+        Args:
+            q (Tensor): The query tensor of shape (b, num_frames_out, num_joints, in_features).
+            k (Tensor): The key tensor of shape (b, num_frames, num_joints, in_features).
+            v (Tensor): The value tensor of shape (b, num_frames, num_joints, in_features).
+            mask_s (Tensor): The spatial mask tensor of shape (b, num_frames_out, num_joints, num_joints).
+            mask_t (Tensor): The temporal mask tensor of shape (b, num_frames_out, num_frames).
+            
+        Returns:
+            Tensor: The output tensor of shape (b, num_frames_out, num_joints, out_features).
+        """
         # x.shape             : b, num_frames_out, num_joints, in_features
         # encoder_output.shape: b, num_frames    , num_joints, in_features
         
@@ -110,7 +137,6 @@ class SpatioTemporalSelfAttention(nn.Module):
         # masking, if mask_s provided
         if mask_s is not None:
             attn_s = attn_s.masked_fill_(mask_s == 0, -1e9)
-            # print(attn_s)
 
         # dimension of interest (i.e. temporal or spatial) needs to be the -2 dimension
         # so, gotta permute temporal q, k and v to reflect this 
@@ -130,8 +156,6 @@ class SpatioTemporalSelfAttention(nn.Module):
 
         if mask_t is not None:
             attn_t = attn_t.masked_fill_(mask_t == 0, -1e9)
-            # print(attn_t)
-
         
         attn_s = softmax(attn_s, dim=-1)
         attn_t = softmax(attn_t, dim=-1)
@@ -160,19 +184,15 @@ class SpatioTemporalSelfAttention(nn.Module):
 
         # get up to temporal size chunk for x_s
         x_s_up_to_temporal_size = x_s[:, :, :temporal_size, :, :]
-        # print(f"x_s_up_to_temporal_size.shape: {x_s_up_to_temporal_size.shape}")
         
         # concatenate temporal attention features up to temporal size to x_s
         x_up_to_temporal_size = torch.cat((x_s_up_to_temporal_size, x_t), dim=-1)
-        # print(f"x_up_to_temporal_size.shape  : {x_up_to_temporal_size.shape}")
 
         # get after temporal size chunk for x_s
         x_s_after_temporal_size = x_s[:, :, temporal_size:, :, :]
-        # print(f"x_s_after_temporal_size.shape: {x_s_after_temporal_size.shape}")
 
         # concatenate temporal attention features after temporal size to x_s
         x_after_temporal_size = torch.cat((x_s[:, :, temporal_size:, :, :], torch.zeros_like(x_s_after_temporal_size)), dim=-1)
-        # print(f"x_after_temporal_size.shape  : {x_after_temporal_size.shape}")
 
         # merge the two x chunks
         x = torch.cat((x_up_to_temporal_size, x_after_temporal_size), dim=2)
@@ -189,9 +209,22 @@ class SpatioTemporalSelfAttention(nn.Module):
         return x
         # (b, num_frames_out, num_joints, out_features)
 
-
-
-if __name__ == "__main__":
+def main():
+    """
+    Initializes the main function.
+    
+    This function is responsible for setting up the main execution flow of the program. It performs the following tasks:
+    
+    - Checks the availability of a CUDA device and sets the device accordingly.
+    - Prints the type of device being used.
+    - Initializes the variables `num_joints`, `num_frames`, `num_frames_out`, `in_features`, `out_features`, and `num_heads` with their respective values.
+    - Creates an instance of the `SpatioTemporalSelfAttention` class with the specified parameters and moves it to the specified device.
+    - Sets the batch size.
+    - Initializes the `encoder_output`, `tgt`, `decoder_mask_s`, and `decoder_mask_t` tensors with random values and moves them to the specified device.
+    - Calls the `spatio_temporal_cross_attention` method of the `SpatioTemporalSelfAttention` instance with the specified parameters.
+    - Prints the shape of the resulting `st_cross_attn` tensor.
+    """
+    
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('Using device:', device,  '- Type:', torch.cuda.get_device_name(0))
     
@@ -232,4 +265,5 @@ if __name__ == "__main__":
 
     print(f"st_cross_attn.shape: {st_cross_attn.shape}")
 
-
+if __name__ == "__main__":
+   main()

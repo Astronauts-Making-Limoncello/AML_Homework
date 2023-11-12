@@ -17,6 +17,17 @@ class SpatioTemporalTransformer(nn.Module):
         num_frames: int, num_joints: int, 
         in_features_encoder: int, in_features_decoder: int
     ):
+        """
+        Initializes the class with the given parameters.
+
+        Args:
+            st_encoder (SpatioTemporalEncoder): The spatio-temporal encoder.
+            st_decoder (SpatioTemporalDecoder): The spatio-temporal decoder.
+            num_frames (int): The number of frames.
+            num_joints (int): The number of joints.
+            in_features_encoder (int): The number of input features for the encoder.
+            in_features_decoder (int): The number of input features for the decoder.
+        """
         super().__init__()
 
         self.st_encoder = st_encoder
@@ -45,26 +56,43 @@ class SpatioTemporalTransformer(nn.Module):
         tgt_mask_s_cross_attn: Tensor, tgt_mask_t_cross_attn: Tensor,
         src_mask_s: Optional[Tensor]=None, src_mask_t: Optional[Tensor]=None,
     ):
-
-        # print(f"\[SpatioTemporalTransformer.forward] src.shape: {src.shape}")
-        # print(f"\[SpatioTemporalTransformer.forward] tgt.shape: {tgt.shape}")
+        """
+        Forward pass of the SpatioTemporalTransformer model.
+        
+        Args:
+            src (Tensor): The input source tensor.
+            tgt (Tensor): The input target tensor.
+            tgt_mask_s_self_attn (Tensor): The self-attention mask for the source target tensor.
+            tgt_mask_t_self_attn (Tensor): The self-attention mask for the temporal target tensor.
+            tgt_mask_s_cross_attn (Tensor): The cross-attention mask for the source target tensor.
+            tgt_mask_t_cross_attn (Tensor): The cross-attention mask for the temporal target tensor.
+            src_mask_s (Optional[Tensor]): The optional self-attention mask for the source tensor.
+            src_mask_t (Optional[Tensor]): The optional self-attention mask for the temporal tensor.
+        
+        Returns:
+            Tensor: The output tensor of the decoder.
+        """
 
         encoder_output = self.st_encoder.forward(
             encoder_input=src, mask_s=src_mask_s, mask_t=src_mask_t
         )
-        # print(f"\[SpatioTemporalTransformer.forward] encoder_output.shape: {encoder_output.shape}")
 
         decoder_output = self.st_decoder.forward(
             decoder_input=tgt, encoder_output=encoder_output, 
             mask_s_self_attn=tgt_mask_s_self_attn, mask_t_self_attn=tgt_mask_t_self_attn,
             mask_s_cross_attn=tgt_mask_s_cross_attn, mask_t_cross_attn=tgt_mask_t_cross_attn
         )
-        # print(f"\[SpatioTemporalTransformer.forward] decoder_output.shape: {decoder_output.shape}")
 
         return decoder_output
 
 
 def main():
+    """
+    Generate the function comment for the given function body.
+
+    :param None:
+    :return str: The function comment in Markdown format.
+    """
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('Using device:', device,  '- Type:', torch.cuda.get_device_name(0))

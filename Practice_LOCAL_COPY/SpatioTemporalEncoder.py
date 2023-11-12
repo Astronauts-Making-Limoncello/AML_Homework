@@ -21,6 +21,24 @@ class SpatioTemporalEncoder(nn.Module):
         num_encoder_blocks: int,
         dropout: float
     ):
+        """
+        Initializes the SpatioTemporalEncoder model.
+
+        Args:
+            in_features (int): The number of input features.
+            hidden_features (int): The number of hidden features.
+            out_features (int): The number of output features.
+            num_joints (int): The number of joints.
+            num_frames (int): The number of frames.
+            num_frames_out (int): The number of output frames.
+            num_heads (int): The number of attention heads.
+            use_skip_connection (bool): Whether to use skip connection.
+            num_encoder_blocks (int): The number of encoder blocks.
+            dropout (float): The dropout rate.
+
+        Returns:
+            None
+        """
         super().__init__()
 
         self.encoder_input_fc_in = nn.Linear(in_features, hidden_features)
@@ -55,6 +73,17 @@ class SpatioTemporalEncoder(nn.Module):
             
             
     def forward(self, encoder_input: Tensor, mask_s: Optional[Tensor]=None, mask_t: Optional[Tensor]=None):
+        """
+        Forward pass of the model.
+       
+        Args:
+           encoder_input (Tensor): The input tensor to the encoder.
+           mask_s (Optional[Tensor], optional): The source mask tensor. Defaults to None.
+           mask_t (Optional[Tensor], optional): The target mask tensor. Defaults to None.
+       
+        Returns:
+           Tensor: The output tensor from the encoder.
+        """
        
         encoder_input = self.encoder_input_fc_in(encoder_input)
 
@@ -69,6 +98,31 @@ class SpatioTemporalEncoder(nn.Module):
 
 
 def main():
+    """
+    The main function that executes the entire program.
+
+    This function initializes the device to be used for computation. It checks if a CUDA-enabled GPU is available and sets the device accordingly. It then prints the device being used and its type.
+
+    The function sets the values for the number of joints, number of frames, and number of output frames. It also sets the input features, hidden features, and output features.
+
+    The function initializes the number of heads, the use of skip connections, and the number of encoder blocks.
+
+    The function creates an instance of the SpatioTemporalEncoder class, passing the input features, hidden features, output features, number of joints, number of frames, and number of output frames as arguments.
+
+    The function sets the batch size and generates random encoder input of shape (batch_size, num_frames, num_joints, in_features).
+
+    The function initializes the mask_s and mask_t variables. These variables can be used to apply masks to the attention mechanism of the encoder.
+
+    The function calls the forward method of the spatio_temporal_encoder instance, passing the encoder input, mask_s, and mask_t as arguments. The result is stored in the x variable.
+
+    The function prints the shape of x.
+
+    Parameters:
+    None
+
+    Returns:
+    None
+    """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('Using device:', device,  '- Type:', torch.cuda.get_device_name(0))
     

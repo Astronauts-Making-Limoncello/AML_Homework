@@ -19,6 +19,22 @@ class SpatioTemporalEncoderBlock(nn.Module):
         num_heads: int, use_skip_connection: bool,
         dropout: float
     ):
+        """
+        Initializes a new instance of the class.
+        
+        Args:
+            in_features (int): The number of input features.
+            out_features (int): The number of output features.
+            num_joints (int): The number of joints.
+            num_frames (int): The number of frames.
+            num_frames_out (int): The number of output frames.
+            num_heads (int): The number of attention heads.
+            use_skip_connection (bool): Whether to use skip connection.
+            dropout (float): The dropout rate.
+        
+        Returns:
+            None
+        """
         super().__init__()
 
         self.use_skip_connection = use_skip_connection
@@ -52,6 +68,17 @@ class SpatioTemporalEncoderBlock(nn.Module):
             
             
     def forward(self, encoder_input: Tensor, mask_s: Optional[Tensor]=None, mask_t: Optional[Tensor]=None):
+        """
+        Forward pass of the model.
+
+        Args:
+            encoder_input (Tensor): The input tensor to the encoder. Shape: (batch_size, temporal_dim, spatial_dim, feature_dim)
+            mask_s (Optional[Tensor], optional): The spatial mask tensor. Default is None.
+            mask_t (Optional[Tensor], optional): The temporal mask tensor. Default is None.
+
+        Returns:
+            Tensor: The output tensor from the encoder. Shape: (batch_size, temporal_dim, spatial_dim, feature_dim)
+        """
         # encoder_input.shape: batch_size, temporal_dim, spatial_dim, feature_dim
         
         enc_inp_for_skip_connection = encoder_input

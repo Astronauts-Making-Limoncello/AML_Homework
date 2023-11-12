@@ -13,14 +13,42 @@ from rich import print
 # In fact, our custom model uses a dedicated cross-spatio-temporal-attention decoder to expand the temporal dimension.
 
 def conv_init(conv):
+    """
+    Initialize the given convolutional layer using the Kaiming normal initialization method.
+
+    Parameters:
+        conv (nn.Module): The convolutional layer to be initialized.
+
+    Returns:
+        None
+    """
     nn.init.kaiming_normal_(conv.weight, mode='fan_out')
     # nn.init.constant_(conv.bias, 0)
 
 def bn_init(bn, scale):
+    """
+    Initialize the given BatchNorm layer with the specified scale.
+
+    Parameters:
+        bn (nn.BatchNorm2d): The BatchNorm layer to initialize.
+        scale (float): The scale value for the weight initialization.
+
+    Returns:
+        None
+    """
     nn.init.constant_(bn.weight, scale)
     nn.init.constant_(bn.bias, 0)
 
 def fc_init(fc):
+    """
+    Initialize the given fully connected layer.
+
+    Parameters:
+        fc (nn.Linear): The fully connected layer to initialize.
+
+    Returns:
+        None
+    """
     nn.init.xavier_normal_(fc.weight)
     nn.init.constant_(fc.bias, 0)
 
@@ -35,6 +63,28 @@ class SpatioTemporalEncoder(nn.Module):
         kernel_size, len_parts=1, use_pes=True, config=DEFAULT_CONFIG, num_persons=1, 
         att_drop=0, dropout=0, dropout2d=0
     ):
+        """
+        Initializes the object with the given parameters.
+
+        Args:
+            num_joints (int): The number of joints.
+            num_frames (int): The number of frames.
+            num_frames_out (int): The number of output frames.
+            num_heads (int): The number of attention heads.
+            num_channels (int): The number of channels.
+            out_features (int): The number of output features.
+            kernel_size (int): The size of the kernel.
+            len_parts (int, optional): The length of the parts. Defaults to 1.
+            use_pes (bool, optional): Whether to use positional encoding. Defaults to True.
+            config (dict, optional): The configuration. Defaults to DEFAULT_CONFIG.
+            num_persons (int, optional): The number of persons. Defaults to 1.
+            att_drop (float, optional): The attention dropout. Defaults to 0.
+            dropout (float, optional): The dropout rate. Defaults to 0.
+            dropout2d (float, optional): The 2D dropout rate. Defaults to 0.
+
+        Returns:
+            None
+        """
         super().__init__()
 
         self.num_frames = num_frames
@@ -84,61 +134,52 @@ class SpatioTemporalEncoder(nn.Module):
                 fc_init(m)
 
     def forward(self, x):
-        # print(f"\[SpatioTemporalTransformerEncoder.forward] x.shape (before reshape): {x.shape}")
+        """
+        Forward pass of the SpatioTemporalTransformerEncoder module.
+        
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, in_features, num_frames, num_joints).
+        
+        Returns:
+            torch.Tensor: Output tensor of shape (batch_size, num_frames, num_joints, num_channels).
+        """
+        
         x = x.reshape(-1, self.num_frames, self.num_joints, self.num_channels, self.num_persons).permute(0, 3, 1, 2, 4).contiguous()
-        # x.shape: (batch_size, in_features, num_frames, num_joints) --> (batch_size, in_features, num_frames, num_joints, 1) 
-        # print(f"\[SpatioTemporalTransformerEncoder.forward] x.shape (after  reshape): {x.shape}")
         N, C, T, V, M = x.shape
         
-        # print(f"\[SpatioTemporalTransformerEncoder.forward] x.shape (before permute and view): {x.shape}")
         x = x.permute(0, 4, 1, 2, 3).contiguous().view(N * M, C, T, V)
-        # x.shape: (batch_size, in_features, num_frames, num_joints, 1) --> (batch_size, in_features, num_frames, num_joints)
-        # print(f"\[SpatioTemporalTransformerEncoder.forward] x.shape (after  permute and view): {x.shape}")
         
-        # print(f"\[SpatioTemporalTransformerEncoder.forward] x.shape (before view): {x.shape}")
         x = x.view(x.size(0), x.size(1), T // self.len_parts, V * self.len_parts)
         # x.shape: (batch_size, in_features, num_frames, num_joints) --> (batch_size, in_features, num_frames, num_joints) 
-        # it seems strange, it's probably needed to handle some special case or something among those lines?
-        # print(f"\[SpatioTemporalTransformerEncoder.forward] x.shape (after  view): {x.shape}")
         
         x = self.input_map(x)
         # x.shape: (batch_size, in_channels, num_frames, num_joints)
         # this probably maps original number of input features (3, i.e. x, y and z coordinates of the joints)
         # to a needed number of features/channels, specified in in_channels of class builder
-        # print(f"\[SpatioTemporalTransformerEncoder.forward] x.shape (after self.input_map): {x.shape}")
 
         for i, block in enumerate(self.blocks):
-            # print("-----------")
-            # print(f"\[SpatioTemporalTransformerEncoder.forward] block {i}, x.shape (before block): {x.shape}")
             x = block(x)
-            # print(f"\[SpatioTemporalTransformerEncoder.forward] block {i}, x.shape (after  block): {x.shape}")
-            # print("-----------")
-            # print("\n\n")
-
-        # print(f"\[SpatioTemporalTransformerEncoder.forward] x.shape (before reshape): {x.shape}")
-        # x = x.reshape(-1, self.num_frames, self.num_joints*self.num_channels)
-        # x.shape: (batch_size, in_features, num_frames, num_joints) --> (batch_size, num_frames, in_features * num_joints)
-        # print(f"\[SpatioTemporalTransformerEncoder.forward] x.shape (after  reshape): {x.shape}")
         x = x.reshape(-1, self.num_frames, self.num_joints, self.num_channels)
-        
-        # print(f"\[SpatioTemporalTransformerEncoder.forward] x.shape (before self.conv_out): {x.shape}")
-        # expands num_frames dimension from num_frames input frames to num_frames_out output frames
-        # it should NOT be needed during the encoding stage...
-        # x = self.conv_out(x)
-        # x.shape: (batch_size, num_frames_out, in_features * num_joints)
-        # print(f"\[SpatioTemporalTransformerEncoder.forward] x.shape (after  self.conv_out): {x.shape}")
-
-        # print(f"\[SpatioTemporalTransformerEncoder.forward] x.shape (before self.fc_out): {x.shape}")
-        # it should be NOT needed during the encoding stage...
-        # out = self.fc_out(x)  
-        # x.shape: (batch_size, num_frames_out, in_features * num_joints)
-        # print(f"\[SpatioTemporalTransformerEncoder.forward] x.shape (after  self.fc_out): {x.shape}")
-
         x = self.fc_out(x)
         
         return x
+    
+def main():
+    """
+    Initializes the main function.
 
-if __name__ == "__main__":
+    This function sets up the device based on the availability of CUDA.
+    It also initializes the number of joints, frames, and output frames.
+    The configuration for the SpatioTemporalEncoder is specified.
+    The input and output features are set.
+    The SpatioTemporalEncoder is initialized and moved to the device.
+    The batch size is set and the input tensor is generated.
+    The shape of the input tensor is printed.
+    Finally, the input tensor is passed through the SpatioTemporalEncoder and the shape of the output is printed.
+
+    Returns:
+        None
+    """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('Using device:', device,  '- Type:', torch.cuda.get_device_name(0))
     
@@ -167,5 +208,8 @@ if __name__ == "__main__":
     encoder_output = spatio_temporal_transformer_encoder(x)
     print(f"\[SpatioTemporalTransformerEncoder.main] encoder_output.shape: {encoder_output.shape}")
 
+
+if __name__ == "__main__":
+    main()
 
 

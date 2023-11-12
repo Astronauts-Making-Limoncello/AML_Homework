@@ -3,7 +3,6 @@ import torch.nn as nn
 from torch.nn.functional import softmax
 from torch import Tensor
 from typing import Optional
-
 from utils.masking import causal_mask
 
 from rich import print
@@ -12,15 +11,26 @@ from rich import print
 # Paper: https://ieeexplore.ieee.org/document/10204803
 # GitHub open-source implementation: https://github.com/zhenhuat/STCFormer
 
-
-# torch.set_printoptions(threshold=1000000000)
-
 class SpatioTemporalCrossAttention(nn.Module):
     def __init__(
         self, in_features: int, out_features: int,
         num_frames: int, num_frames_out: int,
         num_joints: int, num_heads: int
     ):
+        """
+        Initializes a new instance of the class.
+
+        Args:
+            in_features (int): The number of input features.
+            out_features (int): The number of output features.
+            num_frames (int): The number of frames.
+            num_frames_out (int): The number of output frames.
+            num_joints (int): The number of joints.
+            num_heads (int): The number of heads.
+
+        Returns:
+            None
+        """
         super().__init__()
 
         self.in_features = in_features
@@ -139,19 +149,16 @@ class SpatioTemporalCrossAttention(nn.Module):
         v_t = v_t.permute(0, 1, 3, 2, 4)
         # (b, num_heads, num_frames    , num_joints, hidden_features_t) --> (b, num_heads, num_joints, num_frames, hidden_features_t)
         
-        # print(f"k_t.shape: {k_t.shape}") # # #
+  
         k_t = k_t.permute(0, 1, 3, 2, 4)
-        # print(f"k_t.shape: {k_t.shape}") # # #
+
         k_t = k_t.reshape((-1, self.num_frames, self.num_joints, self.hidden_features_t))
-        # print(f"k_t.shape: {k_t.shape}") # # #
+
         k_t = self.temporal_explosion_t(k_t)
-        # print(f"k_t.shape: {k_t.shape}") # # #
+ 
         k_t = k_t.reshape((batch_size, self.num_heads, self.num_frames_out, self.num_joints, self.hidden_features_t))
-        # print(f"k_t.shape: {k_t.shape}") # # #
+
         k_t = k_t.permute(0, 1, 3, 2, 4)
-        # print(f"k_t.shape: {k_t.shape}") # # #
-        
-        # print(f"v_t.shape: {k_t.shape}") # # #
 
         attn_t = torch.einsum("bhstf,bhsug->bhstg", q_t, k_t.transpose(3, 4))
         # (b, num_heads, num_joints, num_frames_out, hidden_features_t) 
@@ -190,19 +197,15 @@ class SpatioTemporalCrossAttention(nn.Module):
 
         # get up to temporal size chunk for x_s
         x_s_up_to_temporal_size = x_s[:, :, :temporal_size, :, :]
-        # print(f"x_s_up_to_temporal_size.shape: {x_s_up_to_temporal_size.shape}")
         
         # concatenate temporal attention features up to temporal size to x_s
         x_up_to_temporal_size = torch.cat((x_s_up_to_temporal_size, x_t), dim=-1)
-        # print(f"x_up_to_temporal_size.shape  : {x_up_to_temporal_size.shape}")
 
         # get after temporal size chunk for x_s
         x_s_after_temporal_size = x_s[:, :, temporal_size:, :, :]
-        # print(f"x_s_after_temporal_size.shape: {x_s_after_temporal_size.shape}")
 
         # concatenate temporal attention features after temporal size to x_s
         x_after_temporal_size = torch.cat((x_s[:, :, temporal_size:, :, :], torch.zeros_like(x_s_after_temporal_size)), dim=-1)
-        # print(f"x_after_temporal_size.shape  : {x_after_temporal_size.shape}")
 
         # merge the two x chunks
         x = torch.cat((x_up_to_temporal_size, x_after_temporal_size), dim=2)
@@ -219,9 +222,7 @@ class SpatioTemporalCrossAttention(nn.Module):
         return x
         # (b, num_frames_out, num_joints, out_features)
 
-
-
-if __name__ == "__main__":
+def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('Using device:', device,  '- Type:', torch.cuda.get_device_name(0))
     
@@ -261,5 +262,8 @@ if __name__ == "__main__":
     )
 
     print(f"st_cross_attn.shape: {st_cross_attn.shape}")
+
+if __name__ == "__main__":
+    main()
 
 

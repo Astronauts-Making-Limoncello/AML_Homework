@@ -21,6 +21,23 @@ class SpatioTemporalDecoderBlock(nn.Module):
         skip_connection_weight: float, 
         dropout: float
     ):
+        """
+        Initializes a new instance of the class.
+
+        Args:
+            in_features (int): The number of input features.
+            out_features (int): The number of output features.
+            num_joints (int): The number of joints.
+            num_frames (int): The number of frames.
+            num_frames_out (int): The number of output frames.
+            num_heads (int): The number of attention heads.
+            use_skip_connection (bool): Whether to use skip connections.
+            skip_connection_weight (float): The weight of the skip connection.
+            dropout (float): The dropout rate.
+
+        Returns:
+            None
+        """
         super().__init__()
 
         self.num_frames_out = num_frames_out
@@ -69,18 +86,29 @@ class SpatioTemporalDecoderBlock(nn.Module):
         mask_s_self_attn: Tensor, mask_t_self_attn: Tensor,
         mask_s_cross_attn: Tensor, mask_t_cross_attn: Tensor
     ):
+        """
+        Performs the forward pass of the model.
+
+        Args:
+            x (Tensor): The input tensor of shape (batch_size, temporal_dim, spatial_dim, feature_dim).
+            memory (Tensor): The memory tensor of shape (batch_size, temporal_dim, spatial_dim, feature_dim).
+            mask_s_self_attn (Tensor): The self-attention mask for the spatial dimension of shape (batch_size, temporal_dim, spatial_dim, spatial_dim).
+            mask_t_self_attn (Tensor): The self-attention mask for the temporal dimension of shape (batch_size, temporal_dim, temporal_dim, temporal_dim).
+            mask_s_cross_attn (Tensor): The cross-attention mask for the spatial dimension of shape (batch_size, temporal_dim, spatial_dim, spatial_dim).
+            mask_t_cross_attn (Tensor): The cross-attention mask for the temporal dimension of shape (batch_size, temporal_dim, temporal_dim, temporal_dim).
+
+        Returns:
+            Tensor: The output tensor after the forward pass of shape (batch_size, temporal_dim, spatial_dim, feature_dim).
+        """
         #  decoder_input.shape: batch_size, temporal_dim, spatial_dim, feature_dim
         # encoder_output.shape: batch_size, temporal_dim, spatial_dim, feature_dim
 
         x_ = self.layer_norm_1(x)
-        # x = x + self.dropout_1(self.spatio_temporal_self_attention(x_, x_, x_, mask_s_self_attn, mask_t_self_attn))
-        x = self.dropout_1(self.spatio_temporal_self_attention(x_, x_, x_, mask_s_self_attn, mask_t_self_attn))
+        x  = self.dropout_1(self.spatio_temporal_self_attention(x_, x_, x_, mask_s_self_attn, mask_t_self_attn))
         x_ = self.layer_norm_2(x)
-        # x = x + self.dropout_2(self.spatio_temporal_cross_attention(x_, memory, memory, mask_s_cross_attn, mask_t_cross_attn))
-        x = self.dropout_2(self.spatio_temporal_cross_attention(x_, memory, memory, mask_s_cross_attn, mask_t_cross_attn))
+        x  = self.dropout_2(self.spatio_temporal_cross_attention(x_, memory, memory, mask_s_cross_attn, mask_t_cross_attn))
         x_ = self.layer_norm_3(x)
-        # x = x + self.dropout_3(self.mlp(x_))
-        x = self.dropout_3(self.mlp(x_))
+        x  = self.dropout_3(self.mlp(x_))
         
         return x
     
