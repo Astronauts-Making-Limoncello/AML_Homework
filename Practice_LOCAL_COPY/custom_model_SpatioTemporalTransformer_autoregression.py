@@ -18,9 +18,9 @@ import datetime
 import os
 import wandb
 
-from SpatioTemporalEncoder import SpatioTemporalEncoder
-from SpatioTemporalDecoder import SpatioTemporalDecoder
-from SpatioTemporalTransformer import SpatioTemporalTransformer
+from models.STCFormer.SpatioTemporalEncoder import SpatioTemporalEncoder
+from models.STCFormer.SpatioTemporalDecoder import SpatioTemporalDecoder
+from models.STCFormer.SpatioTemporalTransformer import SpatioTemporalTransformer
 from utils.masking import causal_mask
 
 import SpatioTemporalTransformer_autoregression_config as conf

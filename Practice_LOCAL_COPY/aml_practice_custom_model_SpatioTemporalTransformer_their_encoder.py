@@ -88,9 +88,9 @@ data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_worke
 print('>>> Validation dataset length: {:d}'.format(vald_dataset.__len__()))
 vald_loader = DataLoader(vald_dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)
 
-from SpatioTemporalEncoder import SpatioTemporalEncoder
-from SpatioTemporalDecoder import SpatioTemporalDecoder
-from SpatioTemporalTransformer import SpatioTemporalTransformer
+from models.STCFormer.SpatioTemporalEncoder import SpatioTemporalEncoder
+from models.STCFormer.SpatioTemporalDecoder import SpatioTemporalDecoder
+from models.STCFormer.SpatioTemporalTransformer import SpatioTemporalTransformer
 
 num_heads_encoder = 8 # encoder
 num_heads_decoder = 1 # decoder
@@ -255,7 +255,7 @@ def train(data_loader,vald_loader, path_to_save_model=None):
   val_task = progress_bar.add_task("[bold][#008080]Val batches progress...", total=n_val_batches)  
 
   wandb.init(
-    project="Custom-model-SpatioTemporalTransformer",
+    project="Custom-model-SpatioTemporalTransformer-their-encoder",
     config=train_config
   )
 
