@@ -108,27 +108,27 @@ hidden_features = 128
 out_features = 3
 
 
-# config = [
-#   # [16, 16, 16], [16, 16, 16], [16, 16, 16], [16, 16, 16], 
-#   # [16, 16, 16], [16, 16, 16], [16, 16, 16], 
-#   [16,  out_features, 16]    
-# ]
+config = [
+  # [16, 16, 16], [16, 16, 16], [16, 16, 16], [16, 16, 16], 
+  # [16, 16, 16], [16, 16, 16], [16, 16, 16], 
+  [16,  out_features, 16]    
+]
 
-# st_encoder = SpatioTemporalEncoder(
-#     num_joints=num_joints, num_frames=num_frames, num_frames_out=num_frames_out,
-#     num_heads=num_heads_encoder, num_channels=in_features, out_features=out_features,
-#     kernel_size=[3, 3], config=config
-# )
+st_encoder = SpatioTemporalEncoder(
+    num_joints=num_joints, num_frames=num_frames, num_frames_out=num_frames_out,
+    num_heads=num_heads_encoder, num_channels=in_features, out_features=out_features,
+    kernel_size=[3, 3], config=config
+)
 
 use_skip_connection_encoder = True
 num_encoder_blocks = 3
 
-st_encoder = SpatioTemporalEncoder(
-    in_features, hidden_features, out_features, num_joints,
-    num_frames, num_frames, # it's encoder, so num_frames_out == num_frames
-    num_heads_encoder, use_skip_connection_encoder,
-    num_encoder_blocks
-)
+# st_encoder = SpatioTemporalEncoder(
+#     in_features, hidden_features, out_features, num_joints,
+#     num_frames, num_frames, # it's encoder, so num_frames_out == num_frames
+#     num_heads_encoder, use_skip_connection_encoder,
+#     num_encoder_blocks
+# )
 
 use_skip_connection_decoder = False
 num_decoder_blocks = 3
