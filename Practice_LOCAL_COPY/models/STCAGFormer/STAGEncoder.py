@@ -57,7 +57,7 @@ DEFAULT_CONFIG = [
     [16, 16, 16], [16, 16, 16], [16, 16, 16], [16,  3, 16]    
 ]
 
-class SpatioTemporalEncoder(nn.Module):
+class STAGEncoder(nn.Module):
     def __init__(
         self, num_joints, num_frames, num_frames_out, num_heads, num_channels, out_features,
         kernel_size, len_parts=1, use_pes=True, config=DEFAULT_CONFIG, num_persons=1, 
