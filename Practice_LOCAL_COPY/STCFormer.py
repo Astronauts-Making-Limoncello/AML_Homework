@@ -5,7 +5,7 @@ import torch.optim as optim
 import torch.autograd
 import torch
 import numpy as np
-import StcFormer_config as conf
+import STCFormer_config as conf
 
 import warnings
 warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
@@ -56,9 +56,9 @@ vald_loader = DataLoader(vald_dataset, batch_size=conf.batch_size, shuffle=True,
 
 ### --- MODEL --- ###
 
-from SpatioTemporalEncoder import SpatioTemporalEncoder
-from SpatioTemporalDecoder import SpatioTemporalDecoder
-from SpatioTemporalTransformer import SpatioTemporalTransformer
+from models.STCFormer.SpatioTemporalEncoder import SpatioTemporalEncoder
+from models.STCFormer.SpatioTemporalDecoder import SpatioTemporalDecoder
+from models.STCFormer.SpatioTemporalTransformer import SpatioTemporalTransformer
 from utils.masking import causal_mask
 
 st_encoder = SpatioTemporalEncoder(
