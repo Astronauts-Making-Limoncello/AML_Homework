@@ -81,7 +81,7 @@ num_joints = 22
 in_features = 3
 in_features_encoder = in_features
 in_features_decoder = in_features
-hidden_features = 32
+hidden_features = 512
 out_features = 3
 out_features_encoder = out_features
 out_features_decoder = out_features
@@ -145,8 +145,8 @@ if autoregression:
   # etc.
 
 use_skip_connection_encoder = True
-num_heads_encoder = 1
-num_encoder_blocks = 1
+num_heads_encoder = 8
+num_encoder_blocks = 6
 dropout_encoder = 0.0
 
 st_encoder = SpatioTemporalEncoder(
@@ -162,8 +162,8 @@ encoder_mask_t = None
 
 use_skip_connection_decoder = False
 skip_connection_weight_decoder = 1
-num_heads_decoder = 1
-num_decoder_blocks = 1
+num_heads_decoder = 8
+num_decoder_blocks = 6
 dropout_decoder = 0.0
 
 st_decoder = SpatioTemporalDecoder(
@@ -200,8 +200,8 @@ print(f"Number of trainable parameters: [b][#6495ED]{sum(p.numel() for p in mode
 
 ### --- OPTIMIZER --- ###
 
-lr=2e-3
-weight_decay=1e-2 
+lr=1e-3
+weight_decay=1e-5 
 amsgrad=True
 momentum=0.3
 nesterov=True
@@ -231,7 +231,7 @@ if use_scheduler:
 
 ### --- TRAINING CONFIG --- ###
 
-n_epochs = 51
+n_epochs = 41
 log_step = 99999
 log_epoch = 1 
 
@@ -428,14 +428,20 @@ def train(data_loader,vald_loader, path_to_save_model=None):
 
         optimizer.zero_grad()
 
-        decoder_mask_s = causal_mask((batch_size_current_batch, num_heads_decoder, num_frames_out, num_joints, num_joints)).to(device)
-        decoder_mask_t = causal_mask((batch_size_current_batch, num_heads_decoder, num_joints, num_frames_out, num_frames)).to(device)
+        decoder_mask_s_self_attn = causal_mask((batch_size_current_batch, num_heads_decoder, num_frames_out, num_joints, num_joints)).to(device)
+        decoder_mask_s_cross_attn = causal_mask((batch_size_current_batch, num_heads_decoder, num_frames_out, num_joints, num_joints)).to(device)
+        # decoder_mask_s_cross_attn = None
+        # decoder_mask_t_cross_attention = causal_mask((batch_size_current_batch, num_heads_decoder, num_joints, num_frames_out, num_frames)).to(device)
+        decoder_mask_t_cross_attention = causal_mask((batch_size_current_batch, num_heads_decoder, num_joints, num_frames_out, num_frames_out)).to(device)
+        # decoder_mask_t_cross_attention = None
+        decoder_mask_t_self_attention = causal_mask((batch_size_current_batch, num_heads_decoder, num_joints, num_frames_out, num_frames_out)).to(device)
 
         sequences_predict=model(
           src=sequences_train, 
           tgt=sequences_gt_autoregression if autoregression else sequences_gt, 
           src_mask_s=encoder_mask_s, src_mask_t=encoder_mask_t,
-          tgt_mask_s=decoder_mask_s, tgt_mask_t=decoder_mask_t
+          tgt_mask_s_self_attn=decoder_mask_s_self_attn, tgt_mask_s_cross_attn=decoder_mask_s_cross_attn, 
+          tgt_mask_t_self_attn=decoder_mask_t_self_attention, tgt_mask_t_cross_attn=decoder_mask_t_cross_attention
         )
         # print(f"\[main.train] sequences_predict.shape: {sequences_predict.shape}")
 
@@ -518,18 +524,25 @@ def train(data_loader,vald_loader, path_to_save_model=None):
               for frame_out in range(num_frames_out):
                 # print(f"\n --- frame_out {frame_out} ---\n")
                 # decoder_mask_s_autoregression = causal_mask((1, 1, 1, num_joints, num_joints)).to(device)
-                decoder_mask_s_autoregression = causal_mask((batch_size_current_batch, num_heads_decoder, num_frames_out, num_joints, num_joints)).to(device)
+                decoder_mask_s_autoregression_self_attn = causal_mask((batch_size_current_batch, num_heads_decoder, num_frames_out, num_joints, num_joints)).to(device)
+                # decoder_mask_s_autoregression_cross_attn = causal_mask((batch_size_current_batch, num_heads_decoder, num_frames_out, num_joints, num_joints)).to(device)
+                decoder_mask_s_autoregression_cross_attn = causal_mask((batch_size_current_batch, num_heads_decoder, num_frames_out, num_joints, num_joints)).to(device)
+                # decoder_mask_s_autoregression_cross_attn = None
                 # decoder_mask_t_autoregression = causal_mask((1, 1, 1, frame_out+1, num_frames)).to(device)
 
                 # decoder_mask_t_autoregression = causal_mask((1, 1, 1, num_frames_out, num_frames)).to(device)
-                decoder_mask_t_autoregression = causal_mask((batch_size_current_batch, num_heads_decoder, num_joints, num_frames_out, num_frames)).to(device)
+                # decoder_mask_t_autoregression_cross_attn = causal_mask((batch_size_current_batch, num_heads_decoder, num_joints, num_frames_out, num_frames)).to(device)
+                decoder_mask_t_autoregression_cross_attn = causal_mask((batch_size_current_batch, num_heads_decoder, num_joints, num_frames_out, num_frames_out)).to(device)
+                # decoder_mask_t_autoregression_cross_attn = None
+                decoder_mask_t_autoregression_self_attn = causal_mask((batch_size_current_batch, num_heads_decoder, num_joints, num_frames_out, num_frames_out)).to(device)
 
                 # print(f"tgt.shape           : {tgt.shape}")
                 # print(f"decoder_mask_t_autoregression.shape: {decoder_mask_t_autoregression.shape}")
                 
                 decoder_output = model(
                   src=sequences_train, tgt=tgt, 
-                  tgt_mask_s=decoder_mask_s_autoregression, tgt_mask_t=decoder_mask_t_autoregression
+                  tgt_mask_s_self_attn=decoder_mask_s_autoregression_self_attn, tgt_mask_t_self_attn=decoder_mask_t_autoregression_self_attn,
+                  tgt_mask_s_cross_attn=decoder_mask_s_autoregression_cross_attn, tgt_mask_t_cross_attn=decoder_mask_t_autoregression_cross_attn
                 )
 
                 # print(f"decoder_output.shape             : {decoder_output.shape}")

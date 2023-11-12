@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch import Tensor
 from typing import Optional
 
-from SpatioTemporalCrossAttention import SpatioTemporalCrossAttention
+from SpatioTemporalSelfAttention import SpatioTemporalSelfAttention
 from MLP import MLP
 from utils.init_layer import conv_init, bn_init, ln_init, fc_init
 
@@ -25,7 +25,7 @@ class SpatioTemporalEncoderBlock(nn.Module):
 
         self.layer_norm_1 = nn.LayerNorm(in_features)
 
-        self.spatio_temporal_cross_attention = SpatioTemporalCrossAttention(
+        self.spatio_temporal_cross_attention = SpatioTemporalSelfAttention(
             in_features=in_features, out_features=out_features, num_joints=num_joints,
             num_frames=num_frames, num_frames_out=num_frames_out,
             num_heads=num_heads

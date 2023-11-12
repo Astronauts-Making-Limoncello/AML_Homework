@@ -60,7 +60,12 @@ class SpatioTemporalDecoder(nn.Module):
                 fc_init(m)
             
             
-    def forward(self, decoder_input: Tensor, encoder_output: Tensor, mask_s: Optional[Tensor]=None, mask_t: Optional[Tensor]=None):
+    def forward(
+            self, 
+            decoder_input: Tensor, encoder_output: Tensor, 
+            mask_s_self_attn: Tensor, mask_t_self_attn: Tensor,
+            mask_s_cross_attn: Tensor, mask_t_cross_attn: Tensor
+        ):
 
         decoder_input  = self.decoder_input_fc_in(decoder_input)
         encoder_output = self.encoder_output_fc_in(encoder_output)
@@ -79,7 +84,9 @@ class SpatioTemporalDecoder(nn.Module):
 
         for decoder_block in self.decoder_blocks:
             x = decoder_block.forward(
-                decoder_input, encoder_output, mask_s=mask_s, mask_t=mask_t
+                decoder_input, encoder_output, 
+                mask_s_self_attn=mask_s_self_attn, mask_t_self_attn=mask_t_self_attn,
+                mask_s_cross_attn=mask_s_cross_attn, mask_t_cross_attn=mask_t_cross_attn
             )
             
 

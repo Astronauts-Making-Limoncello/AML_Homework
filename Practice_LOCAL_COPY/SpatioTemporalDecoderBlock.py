@@ -4,6 +4,7 @@ from torch import Tensor
 from typing import Optional
 
 from SpatioTemporalCrossAttention import SpatioTemporalCrossAttention
+from SpatioTemporalSelfAttention import SpatioTemporalSelfAttention
 from MLP import MLP
 from utils.init_layer import conv_init, bn_init, ln_init, fc_init
 
@@ -27,21 +28,30 @@ class SpatioTemporalDecoderBlock(nn.Module):
         self.use_skip_connection = use_skip_connection
         self.skip_connection_weight = skip_connection_weight
 
-        self.layer_norm_1 = nn.LayerNorm(in_features)
-
-        self.spatio_temporal_cross_attention = SpatioTemporalCrossAttention(
-            in_features=in_features, out_features=out_features, num_joints=num_joints,
-            num_frames=num_frames, num_frames_out=num_frames_out,
-            num_heads=num_heads
+        self.spatio_temporal_self_attention = SpatioTemporalSelfAttention(
+            in_features=in_features, out_features=in_features, num_joints=num_joints,
+            num_frames=num_frames, num_frames_out=num_frames_out, num_heads=num_heads
         )
 
         self.dropout_1 = nn.Dropout(p=dropout)
 
-        self.layer_norm_2 = nn.LayerNorm(out_features)
+        self.layer_norm_1 = nn.LayerNorm(in_features)
 
-        self.mlp = MLP(out_features, out_features)
+        self.spatio_temporal_cross_attention = SpatioTemporalCrossAttention(
+            in_features=in_features, out_features=in_features, num_joints=num_joints,
+            num_frames=num_frames, num_frames_out=num_frames_out,
+            num_heads=num_heads
+        )
 
         self.dropout_2 = nn.Dropout(p=dropout)
+
+        self.layer_norm_2 = nn.LayerNorm(in_features)
+
+        self.mlp = MLP(in_features, out_features)
+
+        self.layer_norm_3 = nn.LayerNorm(out_features)
+
+        self.dropout_3 = nn.Dropout(p=dropout)
             
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -54,36 +64,25 @@ class SpatioTemporalDecoderBlock(nn.Module):
                 fc_init(m)
             
             
-    def forward(self, decoder_input: Tensor, encoder_output: Tensor, mask_s: Optional[Tensor]=None, mask_t: Optional[Tensor]=None):
+    def forward(
+        self, x: Tensor, memory: Tensor, 
+        mask_s_self_attn: Tensor, mask_t_self_attn: Tensor,
+        mask_s_cross_attn: Tensor, mask_t_cross_attn: Tensor
+    ):
         #  decoder_input.shape: batch_size, temporal_dim, spatial_dim, feature_dim
         # encoder_output.shape: batch_size, temporal_dim, spatial_dim, feature_dim
+
+        x_ = self.layer_norm_1(x)
+        # x = x + self.dropout_1(self.spatio_temporal_self_attention(x_, x_, x_, mask_s_self_attn, mask_t_self_attn))
+        x = self.dropout_1(self.spatio_temporal_self_attention(x_, x_, x_, mask_s_self_attn, mask_t_self_attn))
+        x_ = self.layer_norm_2(x)
+        # x = x + self.dropout_2(self.spatio_temporal_cross_attention(x_, memory, memory, mask_s_cross_attn, mask_t_cross_attn))
+        x = self.dropout_2(self.spatio_temporal_cross_attention(x_, memory, memory, mask_s_cross_attn, mask_t_cross_attn))
+        x_ = self.layer_norm_3(x)
+        # x = x + self.dropout_3(self.mlp(x_))
+        x = self.dropout_3(self.mlp(x_))
         
-        dec_inp_for_skip_connection = decoder_input * self.skip_connection_weight
-
-        decoder_input = self.layer_norm_1(decoder_input)
-
-        decoder_input = self.spatio_temporal_cross_attention(
-            q=decoder_input, k=encoder_output, v=encoder_output, 
-            mask_s=mask_s, mask_t=mask_t
-        )
-
-        decoder_input = self.dropout_1(decoder_input)
-
-        if self.use_skip_connection:
-            decoder_input = decoder_input + dec_inp_for_skip_connection
-
-        dec_inp_for_skip_connection = decoder_input * self.skip_connection_weight
-
-        decoder_input = self.layer_norm_2(decoder_input)
-
-        decoder_input = self.mlp(decoder_input)
-
-        decoder_input = self.dropout_2(decoder_input)
-
-        if self.use_skip_connection:
-            decoder_input = decoder_input + dec_inp_for_skip_connection
-
-        return decoder_input
+        return x
     
     
 

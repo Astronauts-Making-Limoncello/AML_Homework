@@ -27,6 +27,9 @@ from concurrent.futures import ThreadPoolExecutor
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print('Using device:', device,  '- Type:', torch.cuda.get_device_name(0))
 
+num_threads = 3
+
+
 ### --- DEVICE --- ###
 
 ############################################################
@@ -593,16 +596,33 @@ def train(data_loader,vald_loader, path_to_save_model=None):
       with torch.no_grad():
           running_loss=0
           n=0
-          for cnt,batch in list(enumerate(vald_loader))[:n_val_batches]:
+
+          # batches_list = list(enumerate(vald_loader))[:n_val_batches]
+          batches_list = list(vald_loader)[:n_val_batches]
+          batches_list_parallel = [batches_list[i: i+num_threads] for i in range(0, len(batches_list), num_threads)]
+
+          for batches in batches_list_parallel:
+
+            with ThreadPoolExecutor(max_workers=num_threads) as executor:
+              results = list(executor.map(eval_step, batches, [dim_used]*num_threads))
+              # print(results)
+
+              results = torch.tensor(results).T
+              # results.shape (num_threads, a), where a is the number of ouput values in eval_step method
+              
+              loss = results[0, :]
+              loss_times_batch_dim = results[1, :]
+              num_processed_elements = results[2, :]
+              # print(f"loss across threads: {loss}")
             
-            loss, loss_times_batch_dim, num_processed_elements = eval_step(batch, dim_used)
+            # loss, loss_times_batch_dim, num_processed_elements = eval_step(batch, dim_used)
             
             # running_loss+=loss*batch_dim
-            running_loss+=np.array(loss_times_batch_dim.cpu()).sum()
-            n+=np.array(num_processed_elements).sum()
+            running_loss+=loss_times_batch_dim.cpu().sum()
+            n+=num_processed_elements.cpu().sum()
 
-            progress_bar.update(task_id=val_task, advance=1)
-            progress_bar.update(task_id=epoch_task, advance=1/(n_train_batches + n_val_batches))
+            progress_bar.update(task_id=val_task, advance=num_threads)
+            progress_bar.update(task_id=epoch_task, advance=num_threads/(n_train_batches + n_val_batches))
 
 
           if running_loss/n < val_loss_best:
