@@ -23,7 +23,7 @@ from models.STCFormer.SpatioTemporalDecoder import SpatioTemporalDecoder
 from models.STCFormer.SpatioTemporalTransformer import SpatioTemporalTransformer
 from utils.masking import causal_mask
 
-import SpatioTemporalTransformer_autoregression_config as conf
+import STCFormer_autoreg_config as conf
 
 from utils.progress import get_progress_bar
 

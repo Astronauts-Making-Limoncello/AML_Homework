@@ -5,7 +5,7 @@ import torch.optim as optim
 import torch.autograd
 import torch
 import numpy as np
-import StcFormer_config as conf
+import STCFormer_config as conf
 
 import warnings
 warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
