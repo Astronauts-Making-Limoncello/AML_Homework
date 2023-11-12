@@ -12,10 +12,7 @@ from rich import print
 # Paper: https://ieeexplore.ieee.org/document/10204803
 # GitHub open-source implementation: https://github.com/zhenhuat/STCFormer
 
-
-# torch.set_printoptions(threshold=1000000000)
-
-class SpatioTemporalCrossAttention(nn.Module):
+class SpatioTemporalSelfAttention(nn.Module):
     def __init__(
         self, in_features: int, out_features: int,
         num_frames: int, num_frames_out: int,
@@ -42,18 +39,6 @@ class SpatioTemporalCrossAttention(nn.Module):
         self.Wk = nn.Linear(in_features, out_features)
         self.Wv = nn.Linear(in_features, out_features)
 
-        # maps temporal dimension of the encoder output to the temporal dimension of the decoder input
-        # in order to have the same sequence length, needed during multi-dimensional mat mul operations
-        self.temporal_explosion_s = nn.Conv2d(
-            in_channels=self.num_frames, out_channels=self.num_frames_out, 
-            kernel_size=1
-        )
-        
-        self.temporal_explosion_t = nn.Conv2d(
-            in_channels=self.num_frames, out_channels=self.num_frames_out, 
-            kernel_size=1
-        )
-
     def forward(
         self, q: Tensor, k: Tensor, v: Tensor, mask_s: Tensor, mask_t: Tensor,
     ):
@@ -67,8 +52,8 @@ class SpatioTemporalCrossAttention(nn.Module):
         # s --> spacial size/dimension  (default: 22 joints)
         # f --> feature size/dimension  (default: 3, the x, y and z coordinates of the joints)
 
-        assert q.shape[0] == k.shape[0] == v.shape[0], f"q, k and v should have the same batch size. Got instead {q.shape[0]}, {k.shape[0]} and {v.shape[0]}"
-
+        assert q.shape == k.shape == v.shape, f"q, k and v should have the same shape. Got instead {q.shape}, {k.shape} and {v.shape}"
+        
         batch_size = q.shape[0]
 
         # applying q, k and v transformations
@@ -87,9 +72,9 @@ class SpatioTemporalCrossAttention(nn.Module):
         # NOTE this could be achieved by requiring num_frames_out in the forward pass,
         # NOTE but for now this approach works ok, since there's this comment explaining it :)
         # q = q.reshape(batch_size, self.num_heads,                  -1, self.num_joints, self.hidden_features)
-        q = q.reshape(batch_size, self.num_heads, self.num_frames_out, self.num_joints, self.hidden_features)
-        k = k.reshape(batch_size, self.num_heads, self.num_frames    , self.num_joints, self.hidden_features)
-        v = v.reshape(batch_size, self.num_heads, self.num_frames    , self.num_joints, self.hidden_features)
+        q = q.reshape(batch_size, self.num_heads, temporal_size, self.num_joints, self.hidden_features)
+        k = k.reshape(batch_size, self.num_heads, temporal_size, self.num_joints, self.hidden_features)
+        v = v.reshape(batch_size, self.num_heads, temporal_size, self.num_joints, self.hidden_features)
         # q.shape      : b, num_heads, num_frames_out, num_joints, hidden_features
         # k and v shape: b, num_heads, num_frames    , num_joints, hidden_features
 
@@ -99,26 +84,22 @@ class SpatioTemporalCrossAttention(nn.Module):
         q_s, q_t = torch.chunk(q, chunks=2, dim=-1)
         k_s, k_t = torch.chunk(k, chunks=2, dim=-1)
         v_s, v_t = torch.chunk(v, chunks=2, dim=-1)
-        
+
         # to handle different sequence lengths between encoder_output and x
         k_s = k_s.permute((0, 2, 3, 1, 4))
         # generic shape of transformation: (b, h, t, s, hidden_features_s) --> (b, t, s, h, hidden_features_s)
-        k_s = k_s.reshape(batch_size, self.num_frames, self.num_joints, self.num_heads * self.hidden_features//2)
+        k_s = k_s.reshape(batch_size, temporal_size, self.num_joints, self.num_heads * self.hidden_features//2)
         # generic shape of transformation: (b, t, s, h, hidden_features_s) --> (b, t, s, out_features/2)
-        k_s = self.temporal_explosion_s(k_s)
-        # (b, num_frames_out, num_joints, out_features/2)
-        k_s = k_s.reshape(batch_size, self.num_frames_out, self.num_joints, self.num_heads, self.hidden_features_s)
+        k_s = k_s.reshape(batch_size, temporal_size, self.num_joints, self.num_heads, self.hidden_features_s)
         k_s = k_s.permute(0, 3, 1, 2, 4)
         # generic shape of transformation: (b, h, t, s, hidden_feature_s)
 
         # to handle different sequence lengths between encoder_output and x
         v_s = v_s.permute((0, 2, 3, 1, 4))
         # generic shape of transformation: (b, h, t, s, hidden_features_s) --> (b, t, s, h, hidden_features_s)
-        v_s = v_s.reshape(batch_size, self.num_frames, self.num_joints, self.num_heads * self.hidden_features//2)
+        v_s = v_s.reshape(batch_size, temporal_size, self.num_joints, self.num_heads * self.hidden_features//2)
         # generic shape of transformation: (b, t, s, h, hidden_features_s) --> (b, t, s, out_features/2)
-        v_s = self.temporal_explosion_s(v_s)
-        # (b, num_frames_out, num_joints, out_features/2)
-        v_s = v_s.reshape(batch_size, self.num_frames_out, self.num_joints, self.num_heads, self.hidden_features_s)
+        v_s = v_s.reshape(batch_size, temporal_size, self.num_joints, self.num_heads, self.hidden_features_s)
         v_s = v_s.permute(0, 3, 1, 2, 4)
         # generic shape of transformation: (b, h, t, s, hidden_feature_s)
 
@@ -139,19 +120,6 @@ class SpatioTemporalCrossAttention(nn.Module):
         v_t = v_t.permute(0, 1, 3, 2, 4)
         # (b, num_heads, num_frames    , num_joints, hidden_features_t) --> (b, num_heads, num_joints, num_frames, hidden_features_t)
         
-        # print(f"k_t.shape: {k_t.shape}") # # #
-        k_t = k_t.permute(0, 1, 3, 2, 4)
-        # print(f"k_t.shape: {k_t.shape}") # # #
-        k_t = k_t.reshape((-1, self.num_frames, self.num_joints, self.hidden_features_t))
-        # print(f"k_t.shape: {k_t.shape}") # # #
-        k_t = self.temporal_explosion_t(k_t)
-        # print(f"k_t.shape: {k_t.shape}") # # #
-        k_t = k_t.reshape((batch_size, self.num_heads, self.num_frames_out, self.num_joints, self.hidden_features_t))
-        # print(f"k_t.shape: {k_t.shape}") # # #
-        k_t = k_t.permute(0, 1, 3, 2, 4)
-        # print(f"k_t.shape: {k_t.shape}") # # #
-        
-        # print(f"v_t.shape: {k_t.shape}") # # #
 
         attn_t = torch.einsum("bhstf,bhsug->bhstg", q_t, k_t.transpose(3, 4))
         # (b, num_heads, num_joints, num_frames_out, hidden_features_t) 
@@ -162,6 +130,8 @@ class SpatioTemporalCrossAttention(nn.Module):
 
         if mask_t is not None:
             attn_t = attn_t.masked_fill_(mask_t == 0, -1e9)
+            # print(attn_t)
+
         
         attn_s = softmax(attn_s, dim=-1)
         attn_t = softmax(attn_t, dim=-1)
@@ -213,7 +183,7 @@ class SpatioTemporalCrossAttention(nn.Module):
         x = x.permute(0, 2, 3, 1, 4)
         # (b, num_heads, num_frames_out, num_joints, hidden_features) --> (b, num_frames_out, num_joints, num_heads, hidden_features)
 
-        x = x.reshape(batch_size, self.num_frames_out, self.num_joints, self.num_heads*self.hidden_features)
+        x = x.reshape(batch_size, temporal_size, self.num_joints, self.num_heads*self.hidden_features)
         # (b, num_frames_out, num_joints, out_features)
 
         return x
@@ -233,7 +203,7 @@ if __name__ == "__main__":
     out_features = 128
     num_heads = 4
     
-    spatio_temporal_cross_attention = SpatioTemporalCrossAttention(
+    spatio_temporal_cross_attention = SpatioTemporalSelfAttention(
         in_features=in_features, out_features=out_features,
         num_frames=num_frames, num_frames_out=num_frames_out,
         num_joints=num_joints,
