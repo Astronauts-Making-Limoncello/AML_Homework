@@ -22,23 +22,15 @@ import os
 
 import rich
 from rich import print
-from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn
-progress_bar = Progress(
-    TextColumn("[progress.description]{task.description}"),
-    TextColumn("[progress.percentage]{task.percentage:>3.2f}%"),
-    BarColumn(),
-    MofNCompleteColumn(),
-    TextColumn("•"),
-    TimeElapsedColumn(),
-    TextColumn("•"),
-    TimeRemainingColumn(),
-    TextColumn("[#00008B]{task.speed} it/s"),
-    SpinnerColumn()
-)
+from utils.progress import get_progress_bar
 
 from models.ConvGAT.GATEncoder import GATEncoder
 from models.ConvGAT.GATDecoder import GATDecoder
 from models.ConvGAT.GATAutoEncoder import GATAutoEncoder
+
+import ConvSTGAT_config as conf
+
+progress_bar = get_progress_bar()
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using device: {torch.cuda.get_device_name(device)}")
@@ -46,209 +38,52 @@ print(f"Using device: {torch.cuda.get_device_name(device)}")
 # *_dim --> number of features --> spacial dimensionality
 # n_*   --> number of frames   --> temporal dimensionality
 
-# # Arguments to setup the datasets
-datas = 'h36m' # dataset name
-path = './data/h3.6m/h3.6m/dataset'
-input_n=10 # number of frames to train on (default=10)
-output_n=25 # number of frames to predict on
-input_dim=3 # dimensions of the input coordinates(default=3)
-skip_rate=1 # # skip rate of frames
-joints_to_consider_n=22
-
-
-#FLAGS FOR THE TRAINING
-mode='train' #choose either train or test mode
-
-batch_size_test=8
-model_path= './checkpoints/' # path to the model checkpoint file
-
-actions_to_consider_test='all' # actions to test on.
-model_name = datas+'_3d_'+str(output_n)+'frames_ckpt' #the model name to save/load
-
-#FLAGS FOR THE VISUALIZATION
-actions_to_consider_viz='all' # actions to visualize
-visualize_from='test'
-n_viz=2
-
-# actions_to_consider_train = ["walking"]
-actions_to_consider_train = None
-
-if actions_to_consider_train is not None:
-  print(f"ACTIONS_TO_CONSIDER_TRAIN: {actions_to_consider_train}")
+if conf.actions_to_consider_train is not None:
+  print(f"WARNING: NOT using all actions, training only on {conf.actions_to_consider_train}")
 
 # Load Data
 print('Loading Train Dataset...')
-dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=0, actions=actions_to_consider_train)
+dataset = datasets.Datasets(
+  conf.path,conf.input_n,conf.output_n,conf.skip_rate, split=0, 
+  actions=conf.actions_to_consider_train
+)
 print('Loading Validation Dataset...')
-vald_dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=1, actions=actions_to_consider_train)
+vald_dataset = datasets.Datasets(
+  conf.path,conf.input_n,conf.output_n,conf.skip_rate, split=1, 
+  actions=conf.actions_to_consider_train
+)
 
-dim_used = np.array([6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 21, 22, 23, 24, 25,
-                  26, 27, 28, 29, 30, 31, 32, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45,
-                  46, 47, 51, 52, 53, 54, 55, 56, 57, 58, 59, 63, 64, 65, 66, 67, 68,
-                  75, 76, 77, 78, 79, 80, 81, 82, 83, 87, 88, 89, 90, 91, 92])
+data_loader = DataLoader(dataset, batch_size=conf.batch_size, shuffle=True, num_workers=0, pin_memory=True)#
 
-n_joints = len(dim_used)//3
-joint_to_consider_ids = set(dim_used//3)
-joints_to_consider_ids_remapped = {
-    k: v for k, v in zip(joint_to_consider_ids, range(len(joint_to_consider_ids))) 
-}
-# print(f"joint_to_consider_ids: {joint_to_consider_ids}")
-# print(f"joints_to_consider_ids_remapped: {joints_to_consider_ids_remapped}")
-# print(f"len(joint_to_consider_ids): {len(joint_to_consider_ids)}")
+vald_loader = DataLoader(vald_dataset, batch_size=conf.batch_size, shuffle=True, num_workers=0, pin_memory=True)
 
-connect = [
-  (1, 2), (2, 3), (3, 4), (4, 5), (6, 7), (7, 8), (8, 9), (9, 10), (0, 1), 
-  (0, 6), (6, 17), (17, 18), (18, 19), (19, 20), (20, 21), (21, 22), (1, 25), 
-  (25, 26), (26, 27), (27, 28), (28, 29), (29, 30), (24, 25), (24, 17), 
-  (24, 14), (14, 15)
-]
-connect = [c for c in connect if c[0] in joint_to_consider_ids and c[1] in joint_to_consider_ids]
-adj_mat = torch.zeros(n_joints, n_joints, dtype=torch.int).to(device)
-for edge in connect:
-  adj_mat[joints_to_consider_ids_remapped[edge[0]], joints_to_consider_ids_remapped[edge[1]]] = 1
-  adj_mat[joints_to_consider_ids_remapped[edge[1]], joints_to_consider_ids_remapped[edge[0]]] = 1  # If the graph is undirected
+enc = GATEncoder(conf.GAT_config_enc, conf.channel_config_enc, conf.heads_concat)
 
-# print(f"len(dim_used): {len(dim_used)}")
-# print(f"len(dim_used)//3: {len(dim_used)//3}")
-# print(f"n_joints: {n_joints}")
-
-batch_size=64
-lim_n_batches_percent = 0.25
-
-# print('>>> Training dataset length: {:d}'.format(dataset.__len__()))
-data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)#
-
-# print('>>> Validation dataset length: {:d}'.format(vald_dataset.__len__()))
-vald_loader = DataLoader(vald_dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)
-
-# *_dim --> number of features --> spacial dimensionality
-# n_*   --> number of frames   --> temporal dimensionality
-
-latent_dim = 1 # features in the latent space
-latent_n = 5 # number of frames in the latent space
-
-# we are autoencoding, so input dims must be the same as the output ones
-output_dim = input_dim
-
-heads_concat = True
-
-# (input_dim, output_dim, n_heads) for each GAT layer
-# make sure that output_dim % n_heads == 0
-GAT_config_enc = [
-  (input_dim, 200, 4),
-  (200, 400, 8),
-  (400 , latent_dim, 1)
-]
-
-# in_channels and out_channels for each conv2D layer
-channel_config_enc = [
-  [input_n, 20],
-  [20, 40],
-  [40, latent_n]
-]
-
-enc = GATEncoder(GAT_config_enc, channel_config_enc, heads_concat)
-
-# (input_dim, output_dim, n_heads) for each GAT layer
-# make sure that output_dim % n_heads == 0
-# GAT_config_dec = [
-#   (input_dim, 128, 4),
-#   (128, 256, 8),
-#   (256, 128, 4),
-#   (128, output_dim, 1)
-# ]
-GAT_config_dec = [
-  (input_dim, 256, 4),
-  (256, 512, 8),
-  (512, 256, 4),
-  (256, output_dim, 1)
-]
-
-# in_channels and out_channels for each conv2D layer
-# channel_config_dec = [
-#   [input_n, 192],
-#   [192, 384],
-#   [384, 192],
-#   [192, 96],
-#   [96, output_n]
-# ]
-channel_config_dec = [
-  [input_n, 384],
-  [384, 768],
-  [768, 384],
-  [384, output_n]
-]
-
-dec = GATDecoder(GAT_config_dec, channel_config_dec, heads_concat)  
+dec = GATDecoder(conf.GAT_config_dec, conf.channel_config_dec, conf.heads_concat)  
 
 # model = GATAutoEncoder(enc, dec).to(device)
 model = dec.to(device)
 
 print('Num trainable params: '+str(sum(p.numel() for p in model.parameters() if p.requires_grad)))
 
-# Arguments to setup the optimizer
-lr=1e-03 # learning rate
+optimizer=optim.Adam(model.parameters(), lr=conf.lr, weight_decay=conf.weight_decay)
 
-use_scheduler=False # use LR scheduler
-scheduler_verbose=True
-
-milestones=[5]   # the epochs after which the learning rate is adjusted by gamma
-step_size = 10
-gamma=0.5 #gamma correction to the learning rate, after reaching the milestone epochs
-
-# weight_decay=1e-05 # weight decay (L2 penalty)
-weight_decay=0 # weight decay (L2 penalty)
-optimizer=optim.Adam(model.parameters(),lr=lr,weight_decay=weight_decay)
-clip_grad=1.0 # select max norm to clip gradients
-
-
-scheduler = None
-if use_scheduler:
-    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=gamma, verbose=scheduler_verbose)  
+if conf.use_scheduler:
+    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=conf.milestones, gamma=conf.gamma, verbose=conf.scheduler_verbose)  
     # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma, verbose=scheduler_verbose)
 
-
-n_epochs = 41
-log_step = 999999999999999
-
 train_id = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-ckpt_dir = f"{model_path}{train_id}"
+ckpt_dir = f"{conf.model_path}{train_id}"
 os.makedirs(ckpt_dir) if not os.path.exists(ckpt_dir) else None
 
 train_config = {
-  "input_n": input_n, 
-  "output_n": output_n, 
-  "input_dim": input_dim, 
-  "skip_rate": skip_rate,
-  "joints_to_consider_n": joints_to_consider_n,
-  "batch_size": batch_size,
-  "lim_n_batches_percent": lim_n_batches_percent,
-  # "adj_mat": adj_mat,
-
-  "latent_dim": latent_dim,
-  "latent_n": latent_n,
-  "output_dim": output_dim,
-  "GAT_config_enc": GAT_config_enc,
-  "channel_config_enc": channel_config_enc,
-  "GAT_config_dec": GAT_config_dec,
-  "channel_config_dec": channel_config_dec,
-  "heads_concat": heads_concat,
+  
   "model": str(model),
   "num_trainable_parameters": str(sum(p.numel() for p in model.parameters() if p.requires_grad)),
-  
-  "lr": lr,
-  "use_scheduler": use_scheduler,
-  "milestones": milestones,
-  "step_size": step_size,
-  "gamma": gamma,
-  "weight_decay": weight_decay,
   "optimizer": str(optimizer),
   "scheduler": str(scheduler),
-  "clip_grad": clip_grad,
-  
-  "n_epochs": n_epochs,
   "train_id": train_id
-}
+}.update(conf.get_config_dict())
 
 def train(data_loader,vald_loader, path_to_save_model=None):
 
@@ -258,10 +93,10 @@ def train(data_loader,vald_loader, path_to_save_model=None):
   )
   wandb.watch(model)
 
-  n_train_batches = int(len(data_loader) * lim_n_batches_percent) + 1 
-  n_val_batches = int(len(vald_loader) * lim_n_batches_percent) + 1 
+  n_train_batches = int(len(data_loader) * conf.lim_n_batches_percent) + 1 
+  n_val_batches = int(len(vald_loader) * conf.lim_n_batches_percent) + 1 
 
-  epoch_task = progress_bar.add_task("[bold][#B22222]Epoch progress...", total=n_epochs-1)  
+  epoch_task = progress_bar.add_task("[bold][#B22222]Epoch progress...", total=conf.n_epochs-1)  
   train_task = progress_bar.add_task("[bold][#6495ED]Train batches progress...", total=n_train_batches)  
   val_task = progress_bar.add_task("[bold][#008080]Val batches progress...", total=n_val_batches)  
 
@@ -272,7 +107,9 @@ def train(data_loader,vald_loader, path_to_save_model=None):
   train_loss_best = 10000000
   val_loss_best   = 10000000
 
-  for epoch in range(n_epochs-1):
+  adj_mat = conf.adj_mat.to(device)
+
+  for epoch in range(conf.n_epochs-1):
       running_loss=0
       n=0
 
@@ -280,66 +117,83 @@ def train(data_loader,vald_loader, path_to_save_model=None):
       progress_bar.reset(task_id=val_task)
 
       model.train()
+
       for cnt,batch in list(enumerate(data_loader))[:n_train_batches]:
-          batch=batch.float().to(device)
-          batch_dim=batch.shape[0]
-          n+=batch_dim
+        batch=batch.float().to(device)
+        
+        batch_dim=batch.shape[0]
+        
+        n+=batch_dim
 
-          sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3)
-          # print(f"[train] sequences_train.shape: {sequences_train.shape}") # batch_size, n_input (temporal dim), n_nodes (spacial dim/skeleton joints), in_features
-          sequences_gt=batch[:, input_n:input_n+output_n, dim_used].view(-1,output_n,len(dim_used)//3,3)
+        sequences_train=batch[:, 0:conf.input_n, conf.dim_used].view(
+          -1, conf.input_n, len(conf.dim_used)//3, 3
+        )
+        sequences_gt=batch[
+          :, conf.input_n:conf.input_n+conf.output_n, conf.dim_used
+        ].view(-1, conf.output_n, len(conf.dim_used)//3, 3)
 
-          optimizer.zero_grad()
-          
-          sequences_predict=model.forward(sequences_train, adj_mat)
-          # print(f"[train] sequences_predict.shape: {sequences_predict.shape}") # batch_size, n_output (temporal dim), n_nodes (spacial dim/skeleton joints), out_features
-          # print(f"[train] sequences_gt.shape: {sequences_gt.shape}") # batch_size, n_output (temporal dim), n_nodes (spacial dim/skeleton joints), out_features
+        optimizer.zero_grad()
+        
+        sequences_predict=model.forward(sequences_train, adj_mat)
 
-          loss=mpjpe_error(sequences_predict,sequences_gt)
+        loss=mpjpe_error(sequences_predict,sequences_gt)
 
-          if (cnt + 1)% log_step == 0:
-            print('[Epoch: %d, Iteration: %5d]  training loss: %.3f' %(epoch + 1, cnt + 1, loss.item()))
+        if (cnt + 1)% conf.log_step == 0:
+          print('[Epoch: %d, Iteration: %5d]  training loss: %.3f' %(epoch + 1, cnt + 1, loss.item()))
 
-          loss.backward()
-          if clip_grad is not None:
-            torch.nn.utils.clip_grad_norm_(model.parameters(),clip_grad)
+        loss.backward()
 
-          optimizer.step()
-          running_loss += loss*batch_dim
+        if conf.clip_grad is not None:
+          torch.nn.utils.clip_grad_norm_(model.parameters(), conf.clip_grad)
 
-          if running_loss/n < train_loss_best:
-            train_loss_best = running_loss/n
+        optimizer.step()
+        
+        running_loss += loss*batch_dim
 
-          progress_bar.update(task_id=train_task, advance=1)
-          progress_bar.update(task_id=epoch_task, advance=1/(n_train_batches + n_val_batches))
+        if running_loss/n < train_loss_best:
+          train_loss_best = running_loss/n
+
+        progress_bar.update(task_id=train_task, advance=1)
+        progress_bar.update(task_id=epoch_task, advance=1/(n_train_batches + n_val_batches))
 
       train_loss.append(running_loss.detach().cpu()/n)
+      
       model.eval()
+
       with torch.no_grad():
+          
           running_loss=0
+          
           n=0
+          
           for cnt,batch in list(enumerate(vald_loader))[:n_val_batches]:
-              batch=batch.float().to(device)
-              batch_dim=batch.shape[0]
-              n+=batch_dim
+            batch=batch.float().to(device)
+            
+            batch_dim=batch.shape[0]
+            
+            n+=batch_dim
 
-              sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3)
-              sequences_gt=batch[:, input_n:input_n+output_n, dim_used].view(-1,output_n,len(dim_used)//3,3)
+            sequences_train=batch[:, 0:conf.input_n, conf.dim_used].view(
+              -1, conf.input_n, len(conf.dim_used)//3, 3
+            )
+            sequences_gt=batch[
+              :, conf.input_n:conf.input_n+conf.output_n, conf.dim_used
+            ].view(-1, conf.output_n, len(conf.dim_used)//3, 3)
 
-              sequences_predict=model(sequences_train, adj_mat)
+            sequences_predict=model(sequences_train, adj_mat)
+            
+            loss=mpjpe_error(sequences_predict,sequences_gt)
 
-              # print(f"sequences_predict.shape: {sequences_predict.shape}")
-              # print(f"sequences_gt.shape: {sequences_gt.shape}")
-              
-              loss=mpjpe_error(sequences_predict,sequences_gt)
+            if (cnt + 1)% conf.log_step == 0:
+              print('[Epoch: %d, Iteration: %5d]  validation loss: %.3f' %(epoch + 1, cnt + 1, loss.item()))
+            
+            running_loss+=loss*batch_dim
 
-              if (cnt + 1)% log_step == 0:
-                print('[Epoch: %d, Iteration: %5d]  validation loss: %.3f' %(epoch + 1, cnt + 1, loss.item()))
-              running_loss+=loss*batch_dim
-
-              progress_bar.update(task_id=val_task, advance=1)
-              progress_bar.update(task_id=epoch_task, advance=1/(n_train_batches + n_val_batches))
+            progress_bar.update(task_id=val_task, advance=1)
+            progress_bar.update(task_id=epoch_task, advance=1/(n_train_batches + n_val_batches))
+          
           val_loss.append(running_loss.detach().cpu()/n)
+          
           if running_loss/n < val_loss_best:
             val_loss_best = running_loss/n
 
@@ -349,34 +203,29 @@ def train(data_loader,vald_loader, path_to_save_model=None):
               'optimizer_state_dict': optimizer.state_dict(),
               'train_loss': train_loss,
               'val_loss': val_loss
-            }, f"{ckpt_dir}/{model_name}_best_val_loss.pt")
+            }, f"{ckpt_dir}/{conf.model_name}_best_val_loss.pt")
 
-
-
-      if use_scheduler:
+      if conf.use_scheduler:
         scheduler.step()
 
-      # save and plot model every 5 epochs
-      '''
-      Insert your code below. Use the argument path_to_save_model to save the model to the path specified.
-      '''
-      if save_and_plot and epoch%5==0:
-          torch.save({
+      if conf.save_and_plot and epoch%5==0:
+        torch.save(
+          {
             'epoch': epoch + 1,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'train_loss': train_loss,
             'val_loss': val_loss
-            }, f"{ckpt_dir}/{model_name}_epoch_{str(epoch + 1)}.pt")
+          }, 
+          f"{ckpt_dir}/{conf.model_name}_epoch_{str(epoch + 1)}.pt"
+        )
 
       wandb.log({
           "epoch": epoch,
           "loss/train": train_loss[-1],
           "loss/val": val_loss[-1]
       })
-      # epoch_task = progress_bar.add_task("[bold][#B22222]Epoch progress...", total=n_epochs-1)  
-      # train_task = progress_bar.add_task("[bold][#6495ED]Train batches progress...", total=n_train_batches)  
-      # val_task = progress_bar.add_task("[bold][#008080]Val batches progress...", total=n_val_batches)  
+      
       if epoch == 0:
         rich.print(f"epoch: [bold][#B22222]{epoch + 1}[/#B22222][/b], train loss: [bold][#6495ED]{train_loss[-1]:.3f}[/#6495ED][/b], val loss: [b][#008080]{val_loss[-1]:.3f}[/#008080][/b]")
       else:
@@ -387,74 +236,64 @@ def train(data_loader,vald_loader, path_to_save_model=None):
     "best_loss/val": val_loss_best,
   })     
 
-save_and_plot = True # save the model and plot the loss. Change to True if you want to save the model and plot the loss
 
 # launch training
-train(data_loader,vald_loader, path_to_save_model=model_path)
-
+train(data_loader, vald_loader, path_to_save_model=conf.model_path)
 
 # TODO implement changes before using it!
 def test(ckpt_path=None):
-    # model.load_state_dict(torch.load(ckpt_path))
+    
     model.load_state_dict(torch.load(ckpt_path)["model_state_dict"])
-    print('model loaded')
+
     model.eval()
+    
     accum_loss=0
+    
     n_batches=0 # number of batches for all the sequences
-    actions=define_actions(actions_to_consider_test)
-    dim_used = np.array([6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 21, 22, 23, 24, 25,
-                      26, 27, 28, 29, 30, 31, 32, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45,
-                      46, 47, 51, 52, 53, 54, 55, 56, 57, 58, 59, 63, 64, 65, 66, 67, 68,
-                      75, 76, 77, 78, 79, 80, 81, 82, 83, 87, 88, 89, 90, 91, 92])
-    # joints at same loc
-    joint_to_ignore = np.array([16, 20, 23, 24, 28, 31])
-    index_to_ignore = np.concatenate((joint_to_ignore * 3, joint_to_ignore * 3 + 1, joint_to_ignore * 3 + 2))
-    joint_equal = np.array([13, 19, 22, 13, 27, 30])
-    index_to_equal = np.concatenate((joint_equal * 3, joint_equal * 3 + 1, joint_equal * 3 + 2))
-    totalll=0
+    
+    actions=define_actions(conf.actions_to_consider_test)
+    
     counter=0
+    
     for action in actions:
       running_loss=0
       n=0
-      dataset_test = datasets.Datasets(path,input_n,output_n,skip_rate, split=2,actions=[action])
-      #print('>>> test action for sequences: {:d}'.format(dataset_test.__len__()))
+      
+      dataset_test = datasets.Datasets(conf.path, conf.input_n, conf.output_n, conf.skip_rate, split=2, actions=[action])
 
-      test_loader = DataLoader(dataset_test, batch_size=batch_size_test, shuffle=False, num_workers=0, pin_memory=True)
+      test_loader = DataLoader(dataset_test, batch_size=conf.batch_size_test, shuffle=False, num_workers=0, pin_memory=True)
+      
       for cnt,batch in enumerate(test_loader):
         with torch.no_grad():
 
           batch=batch.to(device)
+          
           batch_dim=batch.shape[0]
+          
           n+=batch_dim
 
+          all_joints_seq=batch.clone()[:, conf.input_n:conf.input_n+conf.output_n, :]
 
-          all_joints_seq=batch.clone()[:, input_n:input_n+output_n,:]
+          sequences_train=batch[:, 0:conf.input_n, conf.dim_used].view(
+            -1, conf.input_n, len(conf.dim_used)//3, 3
+          ).permute(0,3,1,2)
+          sequences_gt=batch[:, conf.input_n:conf.input_n+conf.output_n, :]
+          
+          sequences_predict=model(sequences_train).view(-1, conf.output_n, conf.joints_to_consider_n, 3)
 
-          sequences_train=batch[:, 0:input_n, dim_used].view(-1,input_n,len(dim_used)//3,3).permute(0,3,1,2)
-          sequences_gt=batch[:, input_n:input_n+output_n, :]
-
-
-          running_time = time.time()
-          sequences_predict=model(sequences_train).view(-1, output_n, joints_to_consider_n, 3)
-          #sequences_predict = model(sequences_train)
-          totalll += time.time()-running_time
           counter += 1
-          sequences_predict=sequences_predict.contiguous().view(-1,output_n,len(dim_used))
 
-          all_joints_seq[:,:,dim_used] = sequences_predict
+          sequences_predict=sequences_predict.contiguous().view(-1, conf.output_n, len(conf.dim_used))
 
+          all_joints_seq[:, :, conf.dim_used] = sequences_predict
 
-          all_joints_seq[:,:,index_to_ignore] = all_joints_seq[:,:,index_to_equal]
+          all_joints_seq[:, :, conf.index_to_ignore] = all_joints_seq[:, :, conf.index_to_equal]
 
-          loss=mpjpe_error(all_joints_seq.view(-1,output_n,32,3),sequences_gt.view(-1,output_n,32,3))
+          loss=mpjpe_error(all_joints_seq.view(-1, conf.output_n, 32, 3), sequences_gt.view(-1, conf.output_n, 32, 3))
           running_loss+=loss*batch_dim
           accum_loss+=loss*batch_dim
 
-      #print('loss at test subject for action : '+str(action)+ ' is: '+ str(running_loss/n))
-      print(str(action),': ', str(np.round((running_loss/n).item(),1)))
       n_batches+=n
-    print('Average: '+str(np.round((accum_loss/n_batches).item(),1)))
-    print('Prediction time: ', totalll/counter)
 
-# ckpt_path = f"{ckpt_dir}/{model_name}_best_val_loss.pt"
-# test(ckpt_path)
+ckpt_path = f"{ckpt_dir}/{conf.model_name}_best_val_loss.pt"
+test(ckpt_path)
