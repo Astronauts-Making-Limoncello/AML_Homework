@@ -60,9 +60,9 @@ n_viz=2
 
 # Load Data
 print('Loading Train Dataset...')
-dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=0)
+dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=0, use_progress_bar=USE_PROGRESS_BARS)
 print('Loading Validation Dataset...')
-vald_dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=1)
+vald_dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=1, use_progress_bar=USE_PROGRESS_BARS)
 
 batch_size=256
 lim_n_batches_percent = 0.01
@@ -75,7 +75,7 @@ vald_loader = DataLoader(vald_dataset, batch_size=batch_size, shuffle=True, num_
 
 from models.sttr.sttformer import Model
 
-n_heads = 8
+n_heads = 1
 kernel_size = [3,3]
 att_drop=0
 
@@ -89,31 +89,29 @@ model = Model(
 print('total number of parameters of the network is: '+str(sum(p.numel() for p in model.parameters() if p.requires_grad)))
 
 # Arguments to setup the optimizer
-lr=0.2 # learning rate
+lr=1e-1 # learning rate
+weight_decay=1e-5 # weight decay (L2 penalty)
+amsgrad=False
+
+momentum=0.3
+nesterov=True
+
+optimizer=optim.Adam(model.parameters(),lr=lr,weight_decay=weight_decay, amsgrad=amsgrad)
+# optimizer=optim.SGD(model.parameters(), lr=lr, weight_decay=weight_decay, momentum=momentum, nesterov=nesterov)
 
 use_scheduler=True # use MultiStepLR scheduler
 milestones=[10,30]   # the epochs after which the learning rate is adjusted by gamma
 gamma=0.1 #gamma correction to the learning rate, after reaching the milestone epochs
 step_size=30
 
-weight_decay=0.00000001 # weight decay (L2 penalty)
-
-momentum=0.3
-nesterov=True
-
-optimizer=optim.Adam(model.parameters(),lr=lr,weight_decay=weight_decay, amsgrad=False)
-# optimizer=optim.SGD(model.parameters(), lr=lr, weight_decay=weight_decay, momentum=momentum, nesterov=nesterov)
-
 if use_scheduler:
-    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
-    # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
+  scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
+  # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
 
 clip_grad=None # select max norm to clip gradients
-# Argument for training
-# n_epochs=41
-# log_step = 200
 
-n_epochs = 41
+
+n_epochs = 6
 log_step = 99999
 log_epoch = 1 
 
@@ -284,13 +282,13 @@ def train(data_loader,vald_loader, path_to_save_model=None):
       else:
         print(f"epoch: [bold][#B22222]{(epoch + 1):04}[/#B22222][/b] | train loss: [bold][#6495ED]{train_loss[-1]:07.3f}[/#6495ED][/b], best (step): {train_loss_best:07.3f} | val loss: [b][#008080]{val_loss[-1]:07.3f}[/#008080][/b], best: {val_loss_best:07.3f}")
 
-      wandb.log({
-        "best_loss/train": np.array(train_loss).min(),
-        "best_loss_epoch/train": np.array(train_loss).argmin(),
-        "best_loss/val": np.array(val_loss).min(),
-        "best_loss_in_step/train": train_loss_best,
-        "best_loss_in_step/val": val_loss_best
-      })
+  wandb.log({
+    "best_loss/train": np.array(train_loss).min(),
+    "best_loss_epoch/train": np.array(train_loss).argmin(),
+    "best_loss/val": np.array(val_loss).min(),
+    "best_loss_in_step/train": train_loss_best,
+    "best_loss_in_step/val": val_loss_best
+  })
 
   final_epoch_print = f"epoch: [bold][#B22222]{(epoch + 1):04}[/#B22222][/b] | train loss: [bold][#6495ED]{train_loss[-1]:07.3f}[/#6495ED][/b], best (step): {train_loss_best:07.3f} | val loss: [b][#008080]{val_loss[-1]:07.3f}[/#008080][/b], best: {val_loss_best:07.3f}"
 
@@ -331,7 +329,7 @@ def test(ckpt_path, final_epoch_print):
       running_loss=0
       
       n=0
-      dataset_test = datasets.Datasets(path,input_n,output_n,skip_rate, split=2,actions=[action])
+      dataset_test = datasets.Datasets(path,input_n,output_n,skip_rate, split=2,actions=[action], use_progress_bar=False)
       #print('>>> test action for sequences: {:d}'.format(dataset_test.__len__()))
       test_loader = DataLoader(dataset_test, batch_size=batch_size_test, shuffle=False, num_workers=0, pin_memory=True)
       n_test_batches = int(len(test_loader) * lim_n_batches_percent) + 1   
@@ -387,4 +385,4 @@ def test(ckpt_path, final_epoch_print):
 
 # ckpt_path = './checkpoints/h36m_3d_25frames_ckpt_epoch_0.pt' # Change the epoch according to the validation curve
 ckpt_path = f"{ckpt_dir}/{model_name}_best_val_loss.pt"
-# test(ckpt_path)
+test(ckpt_path, final_epoch_print)
