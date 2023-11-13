@@ -20,19 +20,15 @@ import wandb
 
 import warnings; warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
 
-from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn
-progress_bar = Progress(
-    TextColumn("[progress.description]{task.description}"),
-    TextColumn("[progress.percentage]{task.percentage:>3.2f}%"),
-    BarColumn(),
-    MofNCompleteColumn(),
-    TextColumn("•"),
-    TimeElapsedColumn(),
-    TextColumn("•"),
-    TimeRemainingColumn(),
-    TextColumn("[#00008B]{task.speed} it/s"),
-    SpinnerColumn(),
-)
+USE_PROGRESS_BARS = True
+if USE_PROGRESS_BARS:
+  from utils.progress import get_progress_bar
+  progress_bar = get_progress_bar()
+
+USE_RICH_PRINT = True
+if USE_RICH_PRINT:
+  from rich import print
+
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -83,10 +79,12 @@ n_heads = 8
 kernel_size = [3,3]
 att_drop=0
 
-model = Model(num_joints=joints_to_consider,
-                 num_frames=input_n, num_frames_out=output_n, num_heads=n_heads,
-                 num_channels=3, kernel_size=kernel_size, use_pes=True,
-                 att_drop=att_drop).to(device)
+model = Model(
+  num_joints=joints_to_consider,
+  num_frames=input_n, num_frames_out=output_n, num_heads=n_heads,
+  num_channels=3, kernel_size=kernel_size, use_pes=True,
+  att_drop=att_drop
+).to(device)
 
 print('total number of parameters of the network is: '+str(sum(p.numel() for p in model.parameters() if p.requires_grad)))
 
@@ -107,15 +105,15 @@ optimizer=optim.Adam(model.parameters(),lr=lr,weight_decay=weight_decay, amsgrad
 # optimizer=optim.SGD(model.parameters(), lr=lr, weight_decay=weight_decay, momentum=momentum, nesterov=nesterov)
 
 if use_scheduler:
-    # scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
+    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
+    # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
 
 clip_grad=None # select max norm to clip gradients
 # Argument for training
 # n_epochs=41
 # log_step = 200
 
-n_epochs = 1
+n_epochs = 41
 log_step = 99999
 log_epoch = 1 
 
@@ -152,20 +150,23 @@ def train(data_loader,vald_loader, path_to_save_model=None):
   n_train_batches = int(len(data_loader) * lim_n_batches_percent) + 1 
   n_val_batches = int(len(vald_loader) * lim_n_batches_percent) + 1 
 
-  epoch_task = progress_bar.add_task("[bold][#B22222]Epoch progress...", total=n_epochs-1)  
-  train_task = progress_bar.add_task("[bold][#6495ED]Train batches progress...", total=n_train_batches)  
-  val_task = progress_bar.add_task("[bold][#008080]Val batches progress...", total=n_val_batches)  
+  if USE_PROGRESS_BARS:
 
-  progress_bar.start()
+    epoch_task = progress_bar.add_task("[bold][#B22222]Epoch progress...", total=n_epochs-1)  
+    train_task = progress_bar.add_task("[bold][#6495ED]Train batches progress...", total=n_train_batches)  
+    val_task = progress_bar.add_task("[bold][#008080]Val batches progress...", total=n_val_batches)  
+
+    progress_bar.start()
 
   wandb.init(
-    project="Spatio-Temporal Transformer fine-tuning",
+    project="Spatio-Temporal Transformer hyperparameters-fine-tuning",
     config=train_config
   )
 
   train_loss = []
   val_loss = []
-  val_loss_best = 1000
+  train_loss_best = 100000000
+  val_loss_best   = 100000000
 
   dim_used = np.array([6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 21, 22, 23, 24, 25,
                     26, 27, 28, 29, 30, 31, 32, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45,
@@ -174,8 +175,9 @@ def train(data_loader,vald_loader, path_to_save_model=None):
 
   for epoch in range(n_epochs-1):
       
-      progress_bar.reset(task_id=train_task)
-      progress_bar.reset(task_id=val_task)
+      if USE_PROGRESS_BARS:
+        progress_bar.reset(task_id=train_task)
+        progress_bar.reset(task_id=val_task)
 
       running_loss=0
       n=0
@@ -193,10 +195,6 @@ def train(data_loader,vald_loader, path_to_save_model=None):
 
           loss=mpjpe_error(sequences_predict,sequences_gt)
 
-
-        #   if cnt % log_step == 0:
-        #     print('[Epoch: %d, Iteration: %5d]  training loss: %.3f' %(epoch + 1, cnt + 1, loss.item()))
-
           loss.backward()
           if clip_grad is not None:
             torch.nn.utils.clip_grad_norm_(model.parameters(),clip_grad)
@@ -204,8 +202,23 @@ def train(data_loader,vald_loader, path_to_save_model=None):
           optimizer.step()
           running_loss += loss*batch_dim
 
-          progress_bar.update(task_id=train_task, advance=1)
-          progress_bar.update(task_id=epoch_task, advance=1/(n_train_batches + n_val_batches))
+          if running_loss/n < train_loss_best:
+            train_loss_best = running_loss/n
+
+            torch.save(
+              {
+                'epoch': epoch + 1,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'train_loss': train_loss,
+                'val_loss': val_loss
+              }, 
+              f"{ckpt_dir}/{model_name}_best_train_loss.pt"
+            )
+
+          if USE_PROGRESS_BARS:
+            progress_bar.update(task_id=train_task, advance=1)
+            progress_bar.update(task_id=epoch_task, advance=1/(n_train_batches + n_val_batches))
 
 
       train_loss.append(running_loss.detach().cpu()/n)
@@ -225,12 +238,11 @@ def train(data_loader,vald_loader, path_to_save_model=None):
               sequences_predict=model(sequences_train).view(-1, output_n, joints_to_consider, 3)
               loss=mpjpe_error(sequences_predict,sequences_gt)
 
-            #   if cnt % log_step == 0:
-            #             print('[Epoch: %d, Iteration: %5d]  validation loss: %.3f' %(epoch + 1, cnt + 1, loss.item()))
               running_loss+=loss*batch_dim
 
-              progress_bar.update(task_id=val_task, advance=1)
-              progress_bar.update(task_id=epoch_task, advance=1/(n_train_batches + n_val_batches))
+              if USE_PROGRESS_BARS:
+                progress_bar.update(task_id=val_task, advance=1)
+                progress_bar.update(task_id=epoch_task, advance=1/(n_train_batches + n_val_batches))
 
 
           val_loss.append(running_loss.detach().cpu()/n)
@@ -252,10 +264,6 @@ def train(data_loader,vald_loader, path_to_save_model=None):
       if use_scheduler:
         scheduler.step()
 
-      # save and plot model every 5 epochs
-      '''
-      Insert your code below. Use the argument path_to_save_model to save the model to the path specified.
-      '''
       if save_and_plot and epoch%log_epoch==0:
           torch.save({
             'epoch': epoch + 1,
@@ -271,13 +279,28 @@ def train(data_loader,vald_loader, path_to_save_model=None):
           "loss/val": val_loss[-1]
       })
 
-      # progress_bar.update(task_id=epoch_task, advance=1)
+      if epoch == 0:
+        print(f"epoch: [bold][#B22222]{(epoch + 1):04}[/#B22222][/b] | train loss: [bold][#6495ED]{train_loss[-1]:07.3f}[/#6495ED][/b] | val loss: [b][#008080]{val_loss[-1]:07.3f}[/#008080][/b]")
+      else:
+        print(f"epoch: [bold][#B22222]{(epoch + 1):04}[/#B22222][/b] | train loss: [bold][#6495ED]{train_loss[-1]:07.3f}[/#6495ED][/b], best (step): {train_loss_best:07.3f} | val loss: [b][#008080]{val_loss[-1]:07.3f}[/#008080][/b], best: {val_loss_best:07.3f}")
 
-save_and_plot = True # save the model and plot the loss. Change to True if you want to save the model and plot the loss
+      wandb.log({
+        "best_loss/train": np.array(train_loss).min(),
+        "best_loss_epoch/train": np.array(train_loss).argmin(),
+        "best_loss/val": np.array(val_loss).min(),
+        "best_loss_in_step/train": train_loss_best,
+        "best_loss_in_step/val": val_loss_best
+      })
 
-train(data_loader,vald_loader, path_to_save_model=model_path)
+  final_epoch_print = f"epoch: [bold][#B22222]{(epoch + 1):04}[/#B22222][/b] | train loss: [bold][#6495ED]{train_loss[-1]:07.3f}[/#6495ED][/b], best (step): {train_loss_best:07.3f} | val loss: [b][#008080]{val_loss[-1]:07.3f}[/#008080][/b], best: {val_loss_best:07.3f}"
 
-def test(ckpt_path=None):
+  return final_epoch_print
+
+save_and_plot = False # save the model and plot the loss. Change to True if you want to save the model and plot the loss
+
+final_epoch_print = train(data_loader,vald_loader, path_to_save_model=model_path)
+
+def test(ckpt_path, final_epoch_print):
 
     action_loss_dict = {}
 
@@ -289,7 +312,9 @@ def test(ckpt_path=None):
     n_batches=0 # number of batches for all the sequences
 
     actions=define_actions(actions_to_consider_test)
-    actions_task = progress_bar.add_task("[bold][#9400D3]Action test batches progress...", total=len(actions))
+
+    if USE_PROGRESS_BARS:
+      actions_task = progress_bar.add_task("[bold][#9400D3]Action test batches progress...", total=len(actions))
 
     dim_used = np.array([6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 21, 22, 23, 24, 25,
                       26, 27, 28, 29, 30, 31, 32, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45,
@@ -347,14 +372,18 @@ def test(ckpt_path=None):
 
       n_batches+=n
 
-      progress_bar.advance(task_id=actions_task, advance=1)
+      if USE_PROGRESS_BARS: 
+        progress_bar.advance(task_id=actions_task, advance=1)
     
     
     # print('Average: '+str(np.round((accum_loss/n_batches).item(),1)))
     # print('Prediction time: ', totalll/counter)
 
     action_loss_dict["loss/test"] = np.round((accum_loss/n_batches).item(),1)
+    action_loss_dict["best_loss/test"] = np.round((accum_loss/n_batches).item(),1)
     wandb.log(action_loss_dict)
+
+    print(f"{final_epoch_print} | test loss (avg of all actions): {np.round((running_loss/n).item(),1)}")
 
 # ckpt_path = './checkpoints/h36m_3d_25frames_ckpt_epoch_0.pt' # Change the epoch according to the validation curve
 ckpt_path = f"{ckpt_dir}/{model_name}_best_val_loss.pt"
