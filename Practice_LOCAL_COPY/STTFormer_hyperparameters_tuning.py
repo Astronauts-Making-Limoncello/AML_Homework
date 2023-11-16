@@ -22,13 +22,13 @@ import warnings; warnings.filterwarnings("ignore", category=np.VisibleDeprecatio
 
 def main(use_progress_bars=False, use_rich_print=False):
 
-  USE_PROGRESS_BARS = True
-  if USE_PROGRESS_BARS:
+  use_progress_bars = True
+  if use_progress_bars:
     from utils.progress import get_progress_bar
     progress_bar = get_progress_bar()
 
-  USE_RICH_PRINT = True
-  if USE_RICH_PRINT:
+  use_rich_print = True
+  if use_rich_print:
     from rich import print
 
 
@@ -62,9 +62,9 @@ def main(use_progress_bars=False, use_rich_print=False):
 
   # Load Data
   print('Loading Train Dataset...')
-  dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=0, use_progress_bar=USE_PROGRESS_BARS)
+  dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=0, use_progress_bar=use_progress_bars)
   print('Loading Validation Dataset...')
-  vald_dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=1, use_progress_bar=USE_PROGRESS_BARS)
+  vald_dataset = datasets.Datasets(path,input_n,output_n,skip_rate, split=1, use_progress_bar=use_progress_bars)
 
   batch_size=256
   lim_n_batches_percent = 0.01
@@ -150,7 +150,7 @@ def main(use_progress_bars=False, use_rich_print=False):
     n_train_batches = int(len(data_loader) * lim_n_batches_percent) + 1 
     n_val_batches = int(len(vald_loader) * lim_n_batches_percent) + 1 
 
-    if USE_PROGRESS_BARS:
+    if use_progress_bars:
 
       epoch_task = progress_bar.add_task("[bold][#B22222]Epoch progress...", total=n_epochs-1)  
       train_task = progress_bar.add_task("[bold][#6495ED]Train batches progress...", total=n_train_batches)  
@@ -175,7 +175,7 @@ def main(use_progress_bars=False, use_rich_print=False):
 
     for epoch in range(n_epochs-1):
 
-        if USE_PROGRESS_BARS:
+        if use_progress_bars:
           progress_bar.reset(task_id=train_task)
           progress_bar.reset(task_id=val_task)
 
@@ -216,7 +216,7 @@ def main(use_progress_bars=False, use_rich_print=False):
                 f"{ckpt_dir}/{model_name}_best_train_loss.pt"
               )
 
-            if USE_PROGRESS_BARS:
+            if use_progress_bars:
               progress_bar.update(task_id=train_task, advance=1)
               progress_bar.update(task_id=epoch_task, advance=1/(n_train_batches + n_val_batches))
 
@@ -240,7 +240,7 @@ def main(use_progress_bars=False, use_rich_print=False):
 
                 running_loss+=loss*batch_dim
 
-                if USE_PROGRESS_BARS:
+                if use_progress_bars:
                   progress_bar.update(task_id=val_task, advance=1)
                   progress_bar.update(task_id=epoch_task, advance=1/(n_train_batches + n_val_batches))
 
@@ -313,7 +313,7 @@ def main(use_progress_bars=False, use_rich_print=False):
 
       actions=define_actions(actions_to_consider_test)
 
-      if USE_PROGRESS_BARS:
+      if use_progress_bars:
         actions_task = progress_bar.add_task("[bold][#9400D3]Action test batches progress...", total=len(actions))
 
       dim_used = np.array([6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 21, 22, 23, 24, 25,
@@ -372,7 +372,7 @@ def main(use_progress_bars=False, use_rich_print=False):
 
         n_batches+=n
 
-        if USE_PROGRESS_BARS: 
+        if use_progress_bars: 
           progress_bar.advance(task_id=actions_task, advance=1)
 
 
