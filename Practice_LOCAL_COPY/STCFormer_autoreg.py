@@ -1172,9 +1172,6 @@ def main(use_progress_bars=False, use_rich_print=False):
 
   final_epoch_print = train(data_loader,vald_loader, path_to_save_model=conf.model_path)
 
-  def test(ckpt_path, final_epoch_print):
-    return final_epoch_print
-
   final_epoch_print = train(data_loader,vald_loader, path_to_save_model=conf.model_path)
 
   def test(ckpt_path, final_epoch_print):
