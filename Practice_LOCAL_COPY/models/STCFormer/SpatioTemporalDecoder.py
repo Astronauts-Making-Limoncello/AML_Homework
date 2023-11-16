@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch import Tensor
 from typing import Optional
 
-from SpatioTemporalDecoderBlock import SpatioTemporalDecoderBlock
+from models.STCFormer.SpatioTemporalDecoderBlock import SpatioTemporalDecoderBlock
 from utils.init_layer import conv_init, fc_init, bn_init, ln_init
 from utils.masking import causal_mask
 

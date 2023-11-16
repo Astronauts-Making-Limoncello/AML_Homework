@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from SpatioTemporalCrossAttention import SpatioTemporalCrossAttention
+from models.STCFormer.SpatioTemporalCrossAttention import SpatioTemporalCrossAttention
 
 def conv_init(conv):
     """

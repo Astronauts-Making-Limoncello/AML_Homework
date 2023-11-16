@@ -3,9 +3,9 @@ import torch.nn as nn
 from torch import Tensor
 from typing import Optional
 
-from SpatioTemporalCrossAttention import SpatioTemporalCrossAttention
-from SpatioTemporalSelfAttention import SpatioTemporalSelfAttention
-from MLP import MLP
+from models.STCFormer.SpatioTemporalCrossAttention import SpatioTemporalCrossAttention
+from models.STCFormer.SpatioTemporalSelfAttention import SpatioTemporalSelfAttention
+from models.STCFormer.MLP import MLP
 from utils.init_layer import conv_init, bn_init, ln_init, fc_init
 
 from rich import print
