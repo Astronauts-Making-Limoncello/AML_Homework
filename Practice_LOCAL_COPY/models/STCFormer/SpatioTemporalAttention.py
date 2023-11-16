@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from pos_embed import Pos_Embed
+from models.STCFormer.pos_embed import Pos_Embed
 
 from rich import print
 
