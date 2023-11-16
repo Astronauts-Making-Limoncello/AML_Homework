@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from SpatioTemporalAttention import SpatioTemporalAttention
+from models.STCFormer.SpatioTemporalAttention import SpatioTemporalAttention
 
 from rich import print
 
@@ -133,7 +133,7 @@ class STAGEncoder(nn.Module):
             elif isinstance(m, nn.Linear):
                 fc_init(m)
 
-    def forward(self, x):
+    def forward(self, encoder_input, mask_s, mask_t):
         """
         Forward pass of the SpatioTemporalTransformerEncoder module.
         
@@ -143,6 +143,8 @@ class STAGEncoder(nn.Module):
         Returns:
             torch.Tensor: Output tensor of shape (batch_size, num_frames, num_joints, num_channels).
         """
+
+        x = encoder_input
         
         x = x.reshape(-1, self.num_frames, self.num_joints, self.num_channels, self.num_persons).permute(0, 3, 1, 2, 4).contiguous()
         N, C, T, V, M = x.shape
@@ -195,7 +197,7 @@ def main():
     in_features = 3
     out_features = 3
     
-    spatio_temporal_transformer_encoder = SpatioTemporalEncoder(
+    spatio_temporal_transformer_encoder = STAGEncoder(
         num_joints=num_joints, num_frames=num_frames, num_frames_out=num_frames_out, 
         num_heads=8, num_channels=in_features, kernel_size=[3, 3], config=config, 
         out_features = out_features

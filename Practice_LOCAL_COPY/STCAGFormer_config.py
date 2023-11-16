@@ -42,8 +42,13 @@ num_frames_out = 25
 # spatial 
 num_joints = 22
 in_features = 3
-hidden_features = 128
+hidden_features = 32
 out_features = 3
+
+in_features_encoder = in_features
+in_features_decoder = in_features
+out_features_encoder = out_features
+out_features_decoder = out_features
 
 
 config = [
@@ -52,8 +57,17 @@ config = [
   [16,  out_features, 16]    
 ]
 
+encoder_mask_s = None
+encoder_mask_t = None
+
 use_skip_connection_decoder = False
-num_decoder_blocks = 3
+num_decoder_blocks = 1
+
+use_skip_connection_decoder = False
+skip_connection_weight_decoder = 1
+num_heads_decoder = 1
+num_decoder_blocks = 1
+dropout_decoder = 0.0
 
 # Arguments to setup the optimizer
 lr=3e-3 # learning rate
