@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 
 import os
 
+import numpy as np
+
 TRAIN_ID = f"2023_11_07_18_22_25"
 CKPT_PATH = f"../checkpoints/{TRAIN_ID}/h36m_3d_25frames_ckpt_best_val_loss.pt"
 imgs_dir = f"../images/{TRAIN_ID}"
@@ -69,14 +71,17 @@ for block_id, (q_matrix_name, k_matrix_name) in enumerate(zip(encoder_q, encoder
   attn_t = softmax(attn_t, dim=-1)
   attn_t = attn_t.cpu()
 
-  heatmap = sns.heatmap(data=attn_t, cmap="Blues")
+  heatmap = sns.heatmap(data=attn_t, cmap="Greens")
   
   figure = heatmap.get_figure()    
   figure.savefig(f"{imgs_dir}/attn_t_encoder_block_{block_id}.png", dpi=200)
 
   plt.clf()
 
-  heatmap = sns.heatmap(data=(attn_t - attn_s), cmap="Blues")
+  heatmap_min_value = torch.min(torch.min(attn_s), torch.min(attn_t))
+  heatmap_max_value = torch.max(torch.max(attn_s), torch.max(attn_t))
+
+  heatmap = sns.heatmap(data=(attn_t - attn_s), cmap="YlGnBu")
   
   figure = heatmap.get_figure()    
   figure.savefig(f"{imgs_dir}/attn_t_minus_s_encoder_block_{block_id}.png", dpi=200)
