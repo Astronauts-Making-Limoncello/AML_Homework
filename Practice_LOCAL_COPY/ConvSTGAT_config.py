@@ -82,7 +82,7 @@ for edge in connect:
 
 
 batch_size = 64
-lim_n_batches_percent = 0.25
+lim_n_batches_percent = 0.025
 
 # *_dim --> number of features --> spacial dimensionality
 # n_*   --> number of frames   --> temporal dimensionality
@@ -98,16 +98,16 @@ heads_concat = True
 # (input_dim, output_dim, n_heads) for each GAT layer
 # make sure that output_dim % n_heads == 0
 GAT_config_enc = [
-  (input_dim, 200, 4),
-  (200, 400, 8),
-  (400 , latent_dim, 1)
+  (input_dim, 20, 4),
+  (20, 40, 8),
+  (40 , latent_dim, 1)
 ]
 
 # in_channels and out_channels for each conv2D layer
 channel_config_enc = [
-  [input_n, 20],
-  [20, 40],
-  [40, latent_n]
+  [input_n, 2],
+  [2, 4],
+  [4, latent_n]
 ]
 
 # (input_dim, output_dim, n_heads) for each GAT layer
@@ -119,10 +119,10 @@ channel_config_enc = [
 #   (128, output_dim, 1)
 # ]
 GAT_config_dec = [
-  (input_dim, 256, 4),
-  (256, 512, 8),
-  (512, 256, 4),
-  (256, output_dim, 1)
+  (input_dim, 16, 4),
+  (16, 16, 8),
+  (16, 16, 4),
+  (16, output_dim, 1)
 ]
 
 # in_channels and out_channels for each conv2D layer
@@ -134,10 +134,10 @@ GAT_config_dec = [
 #   [96, output_n]
 # ]
 channel_config_dec = [
-  [input_n, 384],
-  [384, 768],
-  [768, 384],
-  [384, output_n]
+  [input_n, 8],
+  [8, 8],
+  [8, 8],
+  [8, output_n]
 ]
 
 # Arguments to setup the optimizer

@@ -1,8 +1,8 @@
 import torch
 from torch import nn
 
-from GATEncoder import GATEncoder
-from GATDecoder import GATDecoder
+from models.ConvGAT.GATEncoder import GATEncoder
+from models.ConvGAT.GATDecoder import GATDecoder
 
 class GATAutoEncoder(nn.Module):
   
