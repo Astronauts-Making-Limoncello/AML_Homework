@@ -18,7 +18,7 @@ actions_to_consider_train = None
 batch_size = 256
 batch_size_val = batch_size
 batch_size_test = batch_size
-lim_n_batches_percent = 0.1
+lim_n_batches_percent = 0.25
 
 # temporal dimensionalities
 num_frames = 10
@@ -29,7 +29,7 @@ num_joints = 22
 in_features = 3
 in_features_encoder = in_features
 in_features_decoder = in_features
-hidden_features = 512
+hidden_features = 64
 out_features = 3
 out_features_encoder = out_features
 out_features_decoder = out_features
@@ -91,8 +91,8 @@ end_of_sequence_token_offset   = 0
 # etc.
 
 use_skip_connection_encoder = True
-num_heads_encoder = 8
-num_encoder_blocks = 6
+num_heads_encoder = 1
+num_encoder_blocks = 2
 dropout_encoder = 0.0
 
 encoder_mask_s = None
@@ -100,8 +100,8 @@ encoder_mask_t = None
 
 use_skip_connection_decoder = False
 skip_connection_weight_decoder = 1
-num_heads_decoder = 8
-num_decoder_blocks = 6
+num_heads_decoder = 1
+num_decoder_blocks = 2
 dropout_decoder = 0.0
 
 lr=1e-3
